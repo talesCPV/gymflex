@@ -1,5 +1,5 @@
 const NOMES = { usuarios: 'Usuários', alunos: 'Alunos', funcionarios: 'Funcionários', treinos: 'Treinos', financeiro: 'Financeiro' };
-const MODS = { usuarios: viewUsuarios, alunos: viewAlunos, treinos: viewTreinos };   // demais módulos serão registrados aqui
+const MODS = { usuarios: viewUsuarios, alunos: viewAlunos, treinos: viewTreinos, funcionarios: viewFuncionarios };   // demais módulos serão registrados aqui
 let ME;
 
 const $ = id => document.getElementById(id);
@@ -126,4 +126,36 @@ async function viewTreinos() {
   };
   $('nt').onclick = () => form();
   document.querySelectorAll('[data-et]').forEach(b => b.onclick = () => form(treinos.find(x => x.id == b.dataset.et)));
+}
+
+async function viewFuncionarios() {
+  const fs = await api('api/funcionarios.php');
+  const fmtCpf = c => c ? c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : '';
+  $('main').innerHTML = `
+  <div class="card"><div class="row"><h3>Funcionários</h3><button id="nf">Novo funcionário</button></div>
+    <div class="tbl"><table><tr><th>Nome</th><th>Cargo</th><th>CPF</th><th>Telefone</th><th>Admissão</th><th>Salário</th><th>Ativo</th><th></th></tr>
+    ${fs.map(f => `<tr><td>${esc(f.nome)}</td><td>${esc(f.cargo)}</td><td>${esc(fmtCpf(f.cpf))}</td><td>${esc(f.telefone)}</td>
+      <td>${new Date(f.data_admissao + 'T12:00').toLocaleDateString('pt-BR')}</td><td>${brl(f.salario)}</td><td>${f.ativo == 1 ? 'sim' : 'não'}</td>
+      <td><button class="alt" data-ef="${f.id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="8" style="color:var(--mut)">Nenhum funcionário cadastrado.</td></tr>'}</table></div></div>`;
+  const form = async f => {
+    const us = await api('api/funcionarios.php?usuarios=' + (f?.id_usuario || 0));
+    modal(`<h3>${f ? 'Editar' : 'Novo'} funcionário</h3><form id="ff">
+      <label>Nome</label><input name="nome" required value="${esc(f?.nome)}">
+      <label>Cargo</label><input name="cargo" required list="cargos" placeholder="Professor, Secretaria..." value="${esc(f?.cargo)}">
+      <datalist id="cargos"><option>Professor</option><option>Secretaria</option><option>Atendente</option><option>Limpeza</option><option>Gerente</option></datalist>
+      <label>CPF</label><input name="cpf" inputmode="numeric" maxlength="14" value="${esc(fmtCpf(f?.cpf))}">
+      <label>Telefone</label><input name="telefone" value="${esc(f?.telefone)}">
+      <label>Endereço</label><input name="endereco" value="${esc(f?.endereco)}">
+      <label>Data de admissão</label><input name="data_admissao" type="date" required value="${esc(f?.data_admissao ?? new Date().toISOString().slice(0, 10))}">
+      <label>Salário (R$)</label><input name="salario" type="number" step="0.01" min="0" required value="${esc(f?.salario ?? '')}">
+      <label>Usuário de acesso (opcional)</label><select name="id_usuario"><option value="">— sem login —</option>
+        ${us.map(u => `<option value="${u.id}" ${u.id == f?.id_usuario ? 'selected' : ''}>${esc(u.nome)} (${esc(u.email)})</option>`).join('')}</select>
+      ${f ? `<label class="chk"><input type="checkbox" name="ativo" ${f.ativo == 1 ? 'checked' : ''}> Ativo</label>` : ''}
+      <div class="err" id="fe"></div><div class="row"><button>Salvar</button><button type="button" class="danger" onclick="closeModal()">Cancelar</button></div></form>`);
+    $('ff').onsubmit = async e => { e.preventDefault();
+      const d = Object.fromEntries(new FormData($('ff'))); if (f) { d.id = f.id; d.ativo = $('ff').ativo.checked ? 1 : 0; }
+      try { await api('api/funcionarios.php', 'POST', d); closeModal(); viewFuncionarios(); } catch (x) { $('fe').textContent = x.message; } };
+  };
+  $('nf').onclick = () => form();
+  document.querySelectorAll('[data-ef]').forEach(b => b.onclick = () => form(fs.find(x => x.id == b.dataset.ef)));
 }

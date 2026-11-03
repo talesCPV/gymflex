@@ -41,6 +41,14 @@ Acho que isso é o suficiente para começarmos, este documento é vivo, podendo 
 
 ---
 
+## Baixar e atualizar o código (`clone.sh`)
+
+```bash
+./clone.sh [branch] [pasta]     # padrão: main e ./gymflex
+```
+
+Na primeira vez clona o repositório; dentro de um repositório já clonado, atualiza (`git fetch` + avanço rápido). Nunca altera o banco nem o seu `api/config.local.php`: o arquivo é guardado antes e devolvido no final, mesmo se algo falhar. Se houver alterações suas em arquivos versionados, o script para sem mexer em nada. Se `sql/` mudar, ele avisa para você reexecutar `sql/schema.sql` (seguro de repetir).
+
 ## Como rodar (desenvolvimento)
 
 Requisitos: PHP 8.1+ com `pdo_mysql` e MySQL 8 (ou MariaDB 10.5+).

@@ -1,5 +1,5 @@
 const NOMES = { usuarios: 'Usuários', alunos: 'Alunos', funcionarios: 'Funcionários', treinos: 'Treinos', financeiro: 'Financeiro' };
-const MODS = { usuarios: viewUsuarios };   // demais módulos serão registrados aqui
+const MODS = { usuarios: viewUsuarios, alunos: viewAlunos };   // demais módulos serão registrados aqui
 let ME;
 
 const $ = id => document.getElementById(id);
@@ -65,4 +65,37 @@ function viewPerfis(perfis) {
   $('pn').onclick = () => edit();
   document.querySelectorAll('[data-pe]').forEach(b => b.onclick = () => edit(perfis.find(p => p.id == b.dataset.pe)));
   document.querySelectorAll('[data-pd]').forEach(b => b.onclick = async () => { try { await api('api/perfis.php?id=' + b.dataset.pd, 'DELETE'); closeModal(); viewUsuarios(); } catch (x) { alert(x.message); } });
+}
+
+const brl = v => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+async function viewAlunos() {
+  const al = await api('api/alunos.php');
+  $('main').innerHTML = `
+  <div class="card"><div class="row"><h3>Alunos</h3><button id="na">Novo aluno</button></div>
+    <div class="tbl"><table><tr><th>Matrícula</th><th>Nome</th><th>Telefone</th><th>Contrato</th><th>Valor</th><th>Venc.</th><th>Ativo</th><th></th></tr>
+    ${al.map(a => `<tr><td>${esc(a.matricula)}</td><td>${esc(a.nome)}</td><td>${esc(a.telefone)}</td><td>${esc(a.contrato)}</td>
+      <td>${brl(a.valor_combinado)}</td><td>dia ${a.dia_vencimento}</td><td>${a.ativo == 1 ? 'sim' : 'não'}</td>
+      <td><button class="alt" data-ea="${a.id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="8" style="color:var(--mut)">Nenhum aluno cadastrado.</td></tr>'}</table></div></div>`;
+  const form = async a => {
+    // quem não tem acesso ao módulo Usuários ainda pode salvar o aluno, só não vincula login
+    const us = await api('api/alunos.php?usuarios=' + (a?.id_usuario || 0));
+    modal(`<h3>${a ? 'Editar' : 'Novo'} aluno</h3><form id="af">
+      <label>Nome</label><input name="nome" required value="${esc(a?.nome)}">
+      <label>Telefone</label><input name="telefone" value="${esc(a?.telefone)}">
+      <label>Endereço</label><input name="endereco" value="${esc(a?.endereco)}">
+      <label>Contrato</label><input name="contrato" placeholder="Mensal, Trimestral, Anual..." value="${esc(a?.contrato)}">
+      <label>Valor combinado (R$)</label><input name="valor_combinado" type="number" step="0.01" min="0" required value="${esc(a?.valor_combinado ?? '')}">
+      <label>Dia de vencimento</label><input name="dia_vencimento" type="number" min="1" max="31" required value="${esc(a?.dia_vencimento ?? 10)}">
+      <label>Data de cadastro</label><input name="data_cadastro" type="date" required value="${esc(a?.data_cadastro ?? new Date().toISOString().slice(0, 10))}">
+      <label>Usuário de acesso (opcional)</label><select name="id_usuario"><option value="">— sem login —</option>
+        ${us.map(u => `<option value="${u.id}" ${u.id == a?.id_usuario ? 'selected' : ''}>${esc(u.nome)} (${esc(u.email)})</option>`).join('')}</select>
+      ${a ? `<label class="chk"><input type="checkbox" name="ativo" ${a.ativo == 1 ? 'checked' : ''}> Ativo</label>` : ''}
+      <div class="err" id="ae"></div><div class="row"><button>Salvar</button><button type="button" class="danger" onclick="closeModal()">Cancelar</button></div></form>`);
+    $('af').onsubmit = async e => { e.preventDefault();
+      const d = Object.fromEntries(new FormData($('af'))); if (a) { d.id = a.id; d.ativo = $('af').ativo.checked ? 1 : 0; }
+      try { await api('api/alunos.php', 'POST', d); closeModal(); viewAlunos(); } catch (x) { $('ae').textContent = x.message; } };
+  };
+  $('na').onclick = () => form();
+  document.querySelectorAll('[data-ea]').forEach(b => b.onclick = () => form(al.find(x => x.id == b.dataset.ea)));
 }

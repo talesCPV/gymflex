@@ -16,8 +16,9 @@ REPO_URL="${REPO_URL:-https://github.com/talesCPV/gymflex.git}"
 BRANCH="${1:-main}"
 DIR="${2:-gymflex}"
 
-# arquivos locais que nunca podem ser sobrescritos (caminhos relativos à raiz do repositório)
-PROTEGIDOS=("api/config.local.php")
+# configuração local do banco: se existir (e for sua), nunca é sobrescrita; se não existir, vem do repositório
+# (caminhos relativos à raiz do repositório)
+PROTEGIDOS=("api/config.local.php" "api/config.php")
 
 erro() { echo "ERRO: $*" >&2; exit 1; }
 info() { echo "==> $*"; }
@@ -51,13 +52,6 @@ fi
 ALVO="$RAIZ"
 cd "$ALVO"
 
-# a configuração do banco deve estar fora do git; se não estiver, avisa
-for f in "${PROTEGIDOS[@]}"; do
-  if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
-    echo "AVISO: '$f' está versionado no git; ele será preservado mesmo assim." >&2
-  fi
-done
-
 # identidade só para o stash funcionar mesmo sem git configurado (não altera sua configuração)
 GITID=(-c "user.name=$(git config user.name || echo clone.sh)" -c "user.email=$(git config user.email || echo clone@localhost)")
 EXCLUI=(); for f in "${PROTEGIDOS[@]}"; do EXCLUI+=(":(exclude)$f"); done
@@ -87,8 +81,21 @@ devolver_alteracoes() {
 finalizar() { devolver_alteracoes; restaurar_protegidos; }
 trap finalizar EXIT   # roda mesmo se algo falhar no meio
 
+PRESERVOU=0
 for f in "${PROTEGIDOS[@]}"; do
-  if [ -f "$f" ]; then mv "$f" "$BKP/$(echo "$f" | tr / _)"; info "Configuração local preservada: $f"; fi
+  VERSIONADO=0; git ls-files --error-unmatch "$f" >/dev/null 2>&1 && VERSIONADO=1
+  if [ -f "$f" ]; then
+    if [ "$VERSIONADO" = 1 ] && git diff --quiet HEAD -- "$f"; then
+      :   # igual ao do repositório (nunca foi personalizado): segue a atualização normal
+    else
+      mv "$f" "$BKP/$(echo "$f" | tr / _)"; PRESERVOU=1; info "Configuração local preservada: $f"
+    fi
+  elif [ "$VERSIONADO" = 1 ]; then
+    info "$f não existe aqui; será trazido do repositório."
+  fi
+  # arquivo versionado: deixa a versão do repositório no lugar, limpa, para a atualização não conflitar
+  # (é assim que um arquivo ausente "volta"); o seu, se existia, é devolvido por cima no final
+  if [ "$VERSIONADO" = 1 ]; then git checkout -q -- "$f" 2>/dev/null || true; fi
 done
 
 # suas edições em arquivos versionados NÃO impedem a atualização: ficam de lado e voltam depois
@@ -127,10 +134,10 @@ case "$RESULTADO_ALTERACOES" in
     echo "  git stash list                 # procure 'clone.sh: alterações locais'"
     echo "  git stash show -p              # ver o que você tinha alterado"
     echo "  git stash pop                  # reaplicar e resolver o conflito à mão"
-    echo "Para ter o banco configurado sem editar arquivos do repositório, use api/config.local.php." ;;
+    echo "(O api/config.php e o api/config.local.php nunca entram nesse conflito: são preservados.)" ;;
 esac
 
-[ -f api/config.local.php ] || echo "AVISO: api/config.local.php não existe. Copie api/config.example.php e ajuste o banco."
+[ "$PRESERVOU" = 1 ] || [ -f api/config.local.php ] || echo "AVISO: o banco ainda não está configurado: ajuste api/config.php ou copie api/config.example.php para api/config.local.php."
 if [ "$ANTES" != "$DEPOIS" ] && ! git diff --quiet "$ANTES" "$DEPOIS" -- sql/; then
   echo
   echo "ATENÇÃO: os arquivos em sql/ mudaram. O banco NÃO foi alterado. Para aplicar (seguro, pode repetir):"

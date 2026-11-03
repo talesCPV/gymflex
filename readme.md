@@ -51,7 +51,7 @@ Clone o repositório manualmente na primeira vez. Depois, para trazer as novidad
 
 O script fica na raiz do projeto e atualiza sempre o repositório em que ele está, de qualquer pasta que você o execute. Regras:
 
-- **Seu banco:** nunca é alterado, e o `api/config.local.php` é guardado antes e devolvido no final, mesmo se algo falhar. Configure o banco **só** nesse arquivo; assim você nunca precisa editar arquivos do repositório.
+- **Configuração do banco:** o `api/config.local.php` e o `api/config.php` que você personalizou **nunca são substituídos**: são guardados antes e devolvidos no final, mesmo se algo falhar (e o `config.php` não entra em conflito com o repositório). Se o `api/config.php` não existir na sua máquina, ele é trazido do repositório. Se ele nunca foi personalizado (igual ao do repositório), é atualizado normalmente. O script nunca mexe no banco. Opções novas de configuração têm valor padrão no código, então um `config.php` antigo continua funcionando.
 - **Suas edições em arquivos versionados não impedem a atualização e não exigem commit:** o script as guarda de lado (`git stash`), atualiza e as reaplica. Se a atualização mexeu nas mesmas linhas, o arquivo fica na versão nova e as suas edições continuam guardadas (`git stash list`, `git stash show -p`, `git stash pop`); nada é perdido.
 - **Commits locais que divergem do GitHub:** o script para e devolve tudo como estava.
 - Se `sql/` mudar, ele avisa para você reexecutar `sql/schema.sql` (seguro de repetir).

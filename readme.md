@@ -38,3 +38,14 @@ Este módulo deve ter o controle de todas contas a pagar e faturas a receber, se
 ### CONCLUSÃO
 
 Acho que isso é o suficiente para começarmos, este documento é vivo, podendo ser alterado por mim ou diretamente por você, conforme formos descidindo  novas diretivas para o sistema.
+
+---
+
+## Como rodar (desenvolvimento)
+
+1. Crie o banco `gymflex` no MySQL e execute `sql/001_usuarios.sql`.
+2. (Opcional) crie `api/config.local.php` retornando `['host'=>..., 'db'=>..., 'user'=>..., 'pass'=>...]`.
+3. Crie o Master inicial: `php api/setup.php "Seu Nome" email@exemplo.com suasenha123`
+4. Suba o servidor: `php -S localhost:8000` e abra `http://localhost:8000`.
+
+**Decisão técnica:** a senha usa `password_hash()` do PHP (bcrypt/argon2, com salt próprio) em vez de `email+senha`, por ser mais seguro e não exigir rehash ao trocar o email.

@@ -1,0 +1,13 @@
+<!DOCTYPE html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GYMFLEX - Login</title><link rel="stylesheet" href="css/neon.css"></head><body>
+<div class="center"><form class="card" id="f">
+<h1>GYMFLEX</h1><div style="color:var(--mut)">Gerenciamento de academia</div>
+<label>Email</label><input type="email" id="email" required autofocus>
+<label>Senha</label><input type="password" id="senha" required>
+<div class="err" id="err"></div><button style="width:100%">Entrar</button>
+</form></div>
+<script src="js/api.js"></script><script>
+f.onsubmit = async e => { e.preventDefault(); err.textContent = '';
+  try { await api('api/login.php', 'POST', { email: email.value, senha: senha.value }); location = 'app.html'; }
+  catch (x) { err.textContent = x.message; } };
+</script></body></html>

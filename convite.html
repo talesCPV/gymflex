@@ -1,0 +1,16 @@
+<!DOCTYPE html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GYMFLEX - Convite</title><link rel="stylesheet" href="css/neon.css"></head><body>
+<div class="center"><form class="card" id="f">
+<h1>CONVITE</h1><div id="em" style="color:var(--neon2)"></div>
+<label>Nome</label><input id="nome" required>
+<label>Celular</label><input id="cel">
+<label>Senha (mín. 8)</label><input type="password" id="senha" minlength="8" required>
+<div class="err" id="err"></div><button style="width:100%">Criar conta</button>
+</form></div>
+<script src="js/api.js"></script><script>
+const token = new URLSearchParams(location.search).get('token');
+api('api/convites.php?token=' + encodeURIComponent(token)).then(d => em.textContent = d.email).catch(x => { f.innerHTML = '<h1>Convite inválido</h1><p>' + esc(x.message) + '</p>'; });
+f.onsubmit = async e => { e.preventDefault(); err.textContent = '';
+  try { await api('api/convites.php', 'POST', { token, nome: nome.value, celular: cel.value, senha: senha.value }); location = 'index.html'; }
+  catch (x) { err.textContent = x.message; } };
+</script></body></html>

@@ -1,5 +1,5 @@
 const NOMES = { usuarios: 'Usuários', alunos: 'Alunos', funcionarios: 'Funcionários', treinos: 'Treinos', financeiro: 'Financeiro' };
-const MODS = { usuarios: viewUsuarios, alunos: viewAlunos };   // demais módulos serão registrados aqui
+const MODS = { usuarios: viewUsuarios, alunos: viewAlunos, treinos: viewTreinos };   // demais módulos serão registrados aqui
 let ME;
 
 const $ = id => document.getElementById(id);
@@ -98,4 +98,32 @@ async function viewAlunos() {
   };
   $('na').onclick = () => form();
   document.querySelectorAll('[data-ea]').forEach(b => b.onclick = () => form(al.find(x => x.id == b.dataset.ea)));
+}
+
+async function viewTreinos() {
+  const { aluno, treinos } = await api('api/treinos.php');
+  const card = t => `<div class="card"><div class="row"><h3>${esc(t.nome)}</h3>${aluno ? '' : `<button class="alt" data-et="${t.id}">Editar</button>`}</div>
+    <div style="white-space:pre-wrap;margin:8px 0">${esc(t.descricao) || '<span style="color:var(--mut)">Sem descrição</span>'}</div>
+    <small style="color:var(--mut)">${aluno ? 'Professor: ' + esc(t.professor || '—')
+      : 'Alunos: ' + (t.alunos.length ? t.alunos.map(a => esc(a.nome)).join(', ') : 'nenhum')}</small></div>`;
+  $('main').innerHTML = `<div class="card"><div class="row"><h3>${aluno ? 'Meus treinos' : 'Treinos'}</h3>${aluno ? '' : '<button id="nt">Novo treino</button>'}</div></div>`
+    + (treinos.map(card).join('') || '<div class="card" style="color:var(--mut)">Nenhum treino por aqui ainda.</div>');
+  if (aluno) return;
+  const form = async t => {
+    const als = await api('api/treinos.php?alunos=1');
+    const sel = new Set((t?.alunos || []).map(a => a.id));
+    modal(`<h3>${t ? 'Editar' : 'Novo'} treino</h3><form id="tf">
+      <label>Nome</label><input name="nome" required value="${esc(t?.nome)}">
+      <label>Descrição</label><textarea name="descricao" rows="7" style="width:100%;padding:9px;background:#0b0d10;color:var(--txt);border:1px solid var(--line);border-radius:4px;font:inherit">${esc(t?.descricao)}</textarea>
+      <label>Alunos</label>${als.map(a => `<label class="chk"><input type="checkbox" value="${a.id}" ${sel.has(a.id) ? 'checked' : ''}> ${esc(a.nome)} <small style="color:var(--mut)">${esc(a.matricula)}</small></label>`).join('') || '<small style="color:var(--mut)">Nenhum aluno ativo.</small>'}
+      <div class="err" id="te"></div><div class="row"><button>Salvar</button>${t ? '<button type="button" class="danger" id="td">Excluir</button>' : ''}<button type="button" class="alt" onclick="closeModal()">Cancelar</button></div></form>`);
+    $('tf').onsubmit = async e => { e.preventDefault();
+      try { await api('api/treinos.php', 'POST', { id: t?.id, nome: $('tf').nome.value, descricao: $('tf').descricao.value,
+        alunos: [...$('tf').querySelectorAll('[type=checkbox]:checked')].map(c => +c.value) }); closeModal(); viewTreinos(); }
+      catch (x) { $('te').textContent = x.message; } };
+    if (t) $('td').onclick = async () => { if (!confirm('Excluir este treino?')) return;
+      await api('api/treinos.php?id=' + t.id, 'DELETE'); closeModal(); viewTreinos(); };
+  };
+  $('nt').onclick = () => form();
+  document.querySelectorAll('[data-et]').forEach(b => b.onclick = () => form(treinos.find(x => x.id == b.dataset.et)));
 }

@@ -61,7 +61,7 @@ O script fica na raiz do projeto e atualiza sempre o repositório em que ele est
 
 Requisitos: PHP 8.1+ com `pdo_mysql` e MySQL 8 (ou MariaDB 10.5+). O `sql/schema.sql` foi testado em MySQL 8.0 e MariaDB 10.11.
 
-> Se você já criou o banco com os arquivos antigos (`sql/001`–`006`), apague as tabelas e recomece com o `schema.sql`: ele não altera tabelas que já existem.
+> **Já criou o banco com os arquivos antigos (`sql/001`–`006`)?** O `schema.sql` não altera tabelas que já existem e dará erros como `Unknown column 'l.forma_pagamento'`. Para manter seus dados, execute **antes** o `sql/upgrade_migracoes_antigas.sql` (adiciona só o que falta, pode repetir, não faz nada em banco novo) e depois o `schema.sql`. Se o banco é só de teste, também pode apagar as tabelas e recomeçar.
 
 1. Crie o banco vazio, com o nome que preferir:
    ```sql
@@ -88,6 +88,7 @@ Requisitos: PHP 8.1+ com `pdo_mysql` e MySQL 8 (ou MariaDB 10.5+). O `sql/schema
 ## Estrutura
 
 - `sql/seed_master.sql`: cria o primeiro usuário Master.
+- `sql/upgrade_migracoes_antigas.sql`: atualiza bancos criados com as migrações antigas, sem perder dados.
 - `sql/schema.sql`: tabelas, views (`v_lancamentos`, `v_resumo_mensal`) e procedures (`sp_baixar_lancamento`, `sp_estornar_lancamento`, `sp_encerrar_recorrencia`).
 - `api/`: endpoints PHP (um por módulo) e `lib.php` (sessão, permissões, dia útil).
 - `api/integracao/`: base para bancos/gateways (ver abaixo).

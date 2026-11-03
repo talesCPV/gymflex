@@ -228,16 +228,18 @@ FROM lancamentos l
 LEFT JOIN alunos a ON a.id = l.id_aluno
 LEFT JOIN funcionarios f ON f.id = l.id_funcionario;
 
--- saúde financeira por mês (AAAA-MM) e tipo, ignorando cancelados
+-- saúde financeira por mês e tipo, ignorando cancelados.
+-- mes_inicio é uma DATA (1º dia do mês): evita comparar texto calculado, que no MySQL 8 gera
+-- "Illegal mix of collations" ao comparar com parâmetros da aplicação.
 CREATE OR REPLACE VIEW v_resumo_mensal AS
-SELECT DATE_FORMAT(vencimento, '%Y-%m') AS mes, tipo,
+SELECT DATE_SUB(vencimento, INTERVAL DAYOFMONTH(vencimento) - 1 DAY) AS mes_inicio, tipo,
        SUM(valor) AS total,
        SUM(IF(pago_em IS NOT NULL, valor, 0)) AS pago,
        SUM(IF(pago_em IS NULL, valor, 0)) AS pendente,
        SUM(IF(pago_em IS NULL AND vencimento < CURDATE(), valor, 0)) AS atrasado
 FROM lancamentos
 WHERE cancelado = 0
-GROUP BY DATE_FORMAT(vencimento, '%Y-%m'), tipo;
+GROUP BY DATE_SUB(vencimento, INTERVAL DAYOFMONTH(vencimento) - 1 DAY), tipo;
 
 -- ---------------------------------------------------------------------
 -- PROCEDURES

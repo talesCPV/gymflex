@@ -53,7 +53,9 @@ O script fica na raiz do projeto e atualiza sempre o repositório em que ele est
 
 ## Como rodar (desenvolvimento)
 
-Requisitos: PHP 8.1+ com `pdo_mysql` e MySQL 8 (ou MariaDB 10.5+).
+Requisitos: PHP 8.1+ com `pdo_mysql` e MySQL 8 (ou MariaDB 10.5+). O `sql/schema.sql` foi testado em MySQL 8.0 e MariaDB 10.11.
+
+> Se você já criou o banco com os arquivos antigos (`sql/001`–`006`), apague as tabelas e recomece com o `schema.sql`: ele não altera tabelas que já existem.
 
 1. Crie o banco vazio, com o nome que preferir:
    ```sql
@@ -63,11 +65,13 @@ Requisitos: PHP 8.1+ com `pdo_mysql` e MySQL 8 (ou MariaDB 10.5+).
    ```bash
    mysql -u SEU_USUARIO -p gymflex < sql/schema.sql
    ```
-3. Configure o acesso ao banco: copie `api/config.example.php` para `api/config.local.php` e ajuste `db`, `user` e `pass` (o arquivo não vai para o git).
-4. Crie o usuário Master inicial:
-   ```bash
-   php api/setup.php "Seu Nome" email@exemplo.com suasenha123
-   ```
+3. Configure o acesso ao banco: copie `api/config.example.php` para `api/config.local.php` e ajuste `host`, `port`, `db`, `user` e `pass` (o arquivo não vai para o git).
+4. Crie o usuário Master inicial, de um destes jeitos:
+   - **SQL** (funciona no Workbench): execute `sql/seed_master.sql`. Login: `master@gymflex.local` / `Trocar@123`. **Troque a senha no primeiro acesso** (Usuários > Editar). Dá para gerar o seu próprio hash com `php -r 'echo password_hash("SUA_SENHA", PASSWORD_DEFAULT);'` e colar no arquivo antes de executar.
+   - **Linha de comando:**
+     ```bash
+     php api/setup.php "Seu Nome" email@exemplo.com suasenha123
+     ```
 5. Suba o servidor e acesse `http://localhost:8000`:
    ```bash
    php -S localhost:8000
@@ -77,6 +81,7 @@ Requisitos: PHP 8.1+ com `pdo_mysql` e MySQL 8 (ou MariaDB 10.5+).
 
 ## Estrutura
 
+- `sql/seed_master.sql`: cria o primeiro usuário Master.
 - `sql/schema.sql`: tabelas, views (`v_lancamentos`, `v_resumo_mensal`) e procedures (`sp_baixar_lancamento`, `sp_estornar_lancamento`, `sp_encerrar_recorrencia`).
 - `api/`: endpoints PHP (um por módulo) e `lib.php` (sessão, permissões, dia útil).
 - `api/integracao/`: base para bancos/gateways (ver abaixo).

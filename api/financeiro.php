@@ -58,13 +58,13 @@ if ($m === 'GET') {
   $ini = "$mes-01"; $fim = date('Y-m-d', strtotime("$ini +1 month"));
   $q = db()->prepare("SELECT * FROM v_lancamentos WHERE cancelado=0 AND vencimento>=? AND vencimento<? ORDER BY vencimento,id");
   $q->execute([$ini, $fim]);
-  $r = db()->prepare("SELECT tipo,total,pago,pendente,atrasado FROM v_resumo_mensal WHERE mes=?");
-  $r->execute([$mes]);
+  $r = db()->prepare("SELECT tipo,total,pago,pendente,atrasado FROM v_resumo_mensal WHERE mes_inicio=?");
+  $r->execute([$ini]);
   $res = ['receber'=>['total'=>0,'pago'=>0,'pendente'=>0,'atrasado'=>0], 'pagar'=>['total'=>0,'pago'=>0,'pendente'=>0,'atrasado'=>0]];
   foreach ($r->fetchAll() as $row) { $t = $row['tipo']; unset($row['tipo']); $res[$t] = array_map('floatval', $row); }
   $res['saldo_realizado'] = $res['receber']['pago'] - $res['pagar']['pago'];
   $res['saldo_previsto'] = $res['receber']['total'] - $res['pagar']['total'];
-  $at = db()->prepare("SELECT tipo,COUNT(*) n,SUM(valor) total FROM v_lancamentos WHERE status='atrasado' AND vencimento<? GROUP BY tipo");
+  $at = db()->prepare("SELECT tipo,COUNT(*) n,SUM(valor) total FROM v_lancamentos WHERE atrasado=1 AND vencimento<? GROUP BY tipo");
   $at->execute([$ini]);
   $res['atrasos_anteriores'] = $at->fetchAll();
   out(['resumo'=>$res, 'lancamentos'=>$q->fetchAll()]);

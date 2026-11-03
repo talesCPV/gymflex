@@ -49,13 +49,19 @@ Clone o repositório manualmente na primeira vez. Depois, para trazer as novidad
 ./clone.sh [branch]      # padrão: main
 ```
 
-O script fica na raiz do projeto e atualiza sempre o repositório em que ele está, de qualquer pasta que você o execute. Ele nunca altera o banco nem o seu `api/config.local.php`: o arquivo é guardado antes e devolvido no final, mesmo se algo falhar. Se houver alterações suas em arquivos versionados, ou commits locais que divergem do GitHub, ele para sem mexer em nada. Se `sql/` mudar, ele avisa para você reexecutar `sql/schema.sql` (seguro de repetir). Copiado para fora de um repositório, ele clona em `./gymflex`.
+O script fica na raiz do projeto e atualiza sempre o repositório em que ele está, de qualquer pasta que você o execute. Regras:
+
+- **Seu banco:** nunca é alterado, e o `api/config.local.php` é guardado antes e devolvido no final, mesmo se algo falhar. Configure o banco **só** nesse arquivo; assim você nunca precisa editar arquivos do repositório.
+- **Suas edições em arquivos versionados não impedem a atualização e não exigem commit:** o script as guarda de lado (`git stash`), atualiza e as reaplica. Se a atualização mexeu nas mesmas linhas, o arquivo fica na versão nova e as suas edições continuam guardadas (`git stash list`, `git stash show -p`, `git stash pop`); nada é perdido.
+- **Commits locais que divergem do GitHub:** o script para e devolve tudo como estava.
+- Se `sql/` mudar, ele avisa para você reexecutar `sql/schema.sql` (seguro de repetir).
+- Copiado para fora de um repositório, ele clona em `./gymflex`.
 
 ## Como rodar (desenvolvimento)
 
 Requisitos: PHP 8.1+ com `pdo_mysql` e MySQL 8 (ou MariaDB 10.5+). O `sql/schema.sql` foi testado em MySQL 8.0 e MariaDB 10.11.
 
-> Se você já criou o banco com os arquivos antigos (`sql/001`–`006`), apague as tabelas e recomece com o `schema.sql`: ele não altera tabelas que já existem.
+> **Já criou o banco com os arquivos antigos (`sql/001`–`006`)?** O `schema.sql` não altera tabelas que já existem e dará erros como `Unknown column 'l.forma_pagamento'`. Para manter seus dados, execute **antes** o `sql/upgrade_migracoes_antigas.sql` (adiciona só o que falta, pode repetir, não faz nada em banco novo) e depois o `schema.sql`. Se o banco é só de teste, também pode apagar as tabelas e recomeçar.
 
 1. Crie o banco vazio, com o nome que preferir:
    ```sql
@@ -82,6 +88,7 @@ Requisitos: PHP 8.1+ com `pdo_mysql` e MySQL 8 (ou MariaDB 10.5+). O `sql/schema
 ## Estrutura
 
 - `sql/seed_master.sql`: cria o primeiro usuário Master.
+- `sql/upgrade_migracoes_antigas.sql`: atualiza bancos criados com as migrações antigas, sem perder dados.
 - `sql/schema.sql`: tabelas, views (`v_lancamentos`, `v_resumo_mensal`) e procedures (`sp_baixar_lancamento`, `sp_estornar_lancamento`, `sp_encerrar_recorrencia`).
 - `api/`: endpoints PHP (um por módulo) e `lib.php` (sessão, permissões, dia útil).
 - `api/integracao/`: base para bancos/gateways (ver abaixo).
@@ -100,6 +107,30 @@ Nenhum banco foi escolhido ainda; a baixa é manual. A estrutura para plugar um 
        -H "X-Webhook-Segredo: SEU_SEGREDO" -d '{"id_externo":"ID_DA_COBRANCA","status":"paga"}'
   ```
 - **Para ligar um banco real:** criar `api/integracao/NomeDoBanco.php` implementando a interface, registrar um `case` em `Provedores::ativo()` e colocar as credenciais em `config.local.php`. Ainda não há botão "Cobrar" na tela do Financeiro; ele entra junto com o primeiro provedor real.
+
+## Controle de acesso (entrada dos alunos)
+
+Módulo **Acesso**: a recepção digita (ou lê com um leitor de código de barras) a **matrícula** do aluno, ou parte do **nome**, e o sistema responde na hora **LIBERADO** ou **BLOQUEADO**, registrando a tentativa.
+
+- **Libera** se o aluno está ativo e sem mensalidade vencida além da carência. **Bloqueia** se estiver inativo ou com mensalidade vencida há mais dias que a carência.
+- **Carência:** 5 dias por padrão. Em `api/config.local.php`: `'acesso' => ['carencia_dias' => 5, 'bloquear_inadimplente' => true]`. Com `bloquear_inadimplente` em `false` o sistema só avisa e não bloqueia.
+- **Liberação manual:** num bloqueio, "Liberar mesmo assim" exige um motivo; a entrada fica registrada como manual, com quem liberou e a justificativa.
+- **Nome com vários resultados:** o sistema mostra as opções para escolher. Leituras repetidas do mesmo aluno em 2 minutos não geram registro duplicado.
+- **Painel do dia:** entradas liberadas, alunos diferentes, bloqueios e inadimplentes bloqueados, mais o histórico do dia escolhido e a lista de inadimplentes.
+- **Permissão:** o módulo "Acesso" é liberado por perfil (Usuários > Perfis); um perfil de recepção pode ter só ele.
+- **Banco:** tabela `acessos` e view `v_alunos_inadimplentes` (no `schema.sql`; em banco existente basta executá-lo de novo). A coluna `origem` já prevê outras fontes, como uma catraca, que ainda **não** está integrada.
+
+## Cartão de ponto (funcionários)
+
+Módulo **Ponto**, para controle interno da jornada. **Não substitui** um REP/sistema de ponto homologado exigido pela legislação trabalhista (Portaria MTP 671/2021); confirme com o contador antes de usá-lo como registro oficial.
+
+- **Bater o ponto:** o funcionário entra com o próprio login e toca em "Registrar entrada/saída". A hora é **sempre a do servidor**, nunca a do aparelho. É preciso que o usuário esteja vinculado ao funcionário (Funcionários > Usuário de acesso). Toques repetidos em menos de 60 segundos são ignorados.
+- **Entrada ou saída:** deduzido pela ordem no dia (1ª marcação = entrada, 2ª = saída, 3ª = entrada...). Isso permite o intervalo de almoço e continua correto depois de uma correção.
+- **Espelho do mês:** marcações por dia, horas trabalhadas, esperado e **saldo até ontem**. A jornada padrão é 8h por dia útil (`'ponto' => ['jornada_minutos' => 480]` em `api/config.local.php`), de segunda a sexta, exceto feriados nacionais; pode ser alterada por funcionário. Dia sem marcação conta como falta; dia com número ímpar de marcações aparece como "saída não registrada".
+- **Dois módulos, liberados por perfil:** `Ponto` (bater o próprio ponto e ver o próprio espelho) e `Gestão de ponto` (ver quem está dentro, ver o espelho de qualquer funcionário, lançar marcação manual, cancelar marcação, definir jornada).
+- **Correções com rastro:** a marcação manual exige justificativa e fica marcada com `*`. Marcações não são apagadas: o cancelamento exige motivo e a marcação continua visível, riscada.
+- **Ainda não tratado:** abonos, férias, atestados, horas extras com adicional, banco de horas com vencimento e jornadas com turno que vira a meia-noite.
+- **Banco:** tabelas `ponto_registros` e `ponto_jornadas` (no `schema.sql`; em banco existente basta executá-lo de novo).
 
 ## Regras do Financeiro
 

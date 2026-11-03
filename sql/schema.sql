@@ -212,6 +212,55 @@ CREATE TABLE IF NOT EXISTS extrato_bancario (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------
+-- CONTROLE DE ACESSO (entrada dos alunos na academia)
+-- ---------------------------------------------------------------------
+-- cada tentativa de entrada fica registrada, liberada ou bloqueada
+CREATE TABLE IF NOT EXISTS acessos (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  id_aluno INT NULL,
+  data_hora DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  resultado ENUM('liberado','bloqueado') NOT NULL,
+  motivo VARCHAR(160) NULL,
+  manual TINYINT(1) NOT NULL DEFAULT 0,       -- 1 = liberado manualmente por um funcionário
+  origem VARCHAR(20) NOT NULL DEFAULT 'recepcao',   -- recepcao, catraca...
+  id_usuario INT NULL,                        -- quem registrou
+  INDEX idx_acessos_data (data_hora),
+  INDEX idx_acessos_aluno (id_aluno, data_hora),
+  FOREIGN KEY (id_aluno) REFERENCES alunos(id) ON DELETE SET NULL,
+  FOREIGN KEY (id_usuario) REFERENCES usuarios(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------------------
+-- CARTÃO DE PONTO (funcionários)
+-- Controle interno de jornada. NÃO substitui um REP/sistema de ponto homologado exigido
+-- pela legislação trabalhista (Portaria MTP 671/2021); confirme com o contador.
+-- ---------------------------------------------------------------------
+-- cada marcação; entrada/saída é deduzida pela ordem no dia (1ª entrada, 2ª saída, 3ª entrada...)
+CREATE TABLE IF NOT EXISTS ponto_registros (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  id_funcionario INT NOT NULL,
+  data_hora DATETIME NOT NULL,                       -- sempre a hora do servidor, no ponto próprio
+  origem ENUM('proprio','manual') NOT NULL DEFAULT 'proprio',
+  justificativa VARCHAR(200) NULL,                   -- obrigatória nas marcações manuais
+  id_usuario INT NULL,                               -- quem registrou
+  cancelado TINYINT(1) NOT NULL DEFAULT 0,           -- marcações não são apagadas, só canceladas
+  cancelado_motivo VARCHAR(200) NULL,
+  cancelado_por INT NULL,
+  criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_ponto_func_data (id_funcionario, data_hora),
+  FOREIGN KEY (id_funcionario) REFERENCES funcionarios(id),
+  FOREIGN KEY (id_usuario) REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY (cancelado_por) REFERENCES usuarios(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- jornada diária de quem foge do padrão (config 'ponto.jornada_minutos', 480 = 8h)
+CREATE TABLE IF NOT EXISTS ponto_jornadas (
+  id_funcionario INT NOT NULL PRIMARY KEY,
+  minutos SMALLINT UNSIGNED NOT NULL,
+  FOREIGN KEY (id_funcionario) REFERENCES funcionarios(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------------------
 -- VIEWS
 -- ---------------------------------------------------------------------
 -- lançamentos com nome do aluno/funcionário e status calculado
@@ -240,6 +289,18 @@ SELECT DATE_SUB(vencimento, INTERVAL DAYOFMONTH(vencimento) - 1 DAY) AS mes_inic
 FROM lancamentos
 WHERE cancelado = 0
 GROUP BY DATE_SUB(vencimento, INTERVAL DAYOFMONTH(vencimento) - 1 DAY), tipo;
+
+-- alunos com mensalidade vencida e não paga (base do bloqueio de acesso)
+CREATE OR REPLACE VIEW v_alunos_inadimplentes AS
+SELECT a.id AS id_aluno, a.nome, a.matricula,
+       COUNT(*) AS mensalidades,
+       SUM(l.valor) AS total,
+       MIN(l.vencimento) AS vencimento_mais_antigo,
+       DATEDIFF(CURDATE(), MIN(l.vencimento)) AS dias_atraso
+FROM alunos a
+JOIN lancamentos l ON l.id_aluno = a.id AND l.tipo = 'receber' AND l.cancelado = 0
+                  AND l.pago_em IS NULL AND l.vencimento < CURDATE()
+GROUP BY a.id, a.nome, a.matricula;
 
 -- ---------------------------------------------------------------------
 -- PROCEDURES

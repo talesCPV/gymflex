@@ -41,13 +41,15 @@ Acho que isso é o suficiente para começarmos, este documento é vivo, podendo 
 
 ---
 
-## Baixar e atualizar o código (`clone.sh`)
+## Atualizar o código (`clone.sh`)
+
+Clone o repositório manualmente na primeira vez. Depois, para trazer as novidades do GitHub:
 
 ```bash
-./clone.sh [branch] [pasta]     # padrão: main e ./gymflex
+./clone.sh [branch]      # padrão: main
 ```
 
-Na primeira vez clona o repositório; dentro de um repositório já clonado, atualiza (`git fetch` + avanço rápido). Nunca altera o banco nem o seu `api/config.local.php`: o arquivo é guardado antes e devolvido no final, mesmo se algo falhar. Se houver alterações suas em arquivos versionados, o script para sem mexer em nada. Se `sql/` mudar, ele avisa para você reexecutar `sql/schema.sql` (seguro de repetir).
+O script fica na raiz do projeto e atualiza sempre o repositório em que ele está, de qualquer pasta que você o execute. Ele nunca altera o banco nem o seu `api/config.local.php`: o arquivo é guardado antes e devolvido no final, mesmo se algo falhar. Se houver alterações suas em arquivos versionados, ou commits locais que divergem do GitHub, ele para sem mexer em nada. Se `sql/` mudar, ele avisa para você reexecutar `sql/schema.sql` (seguro de repetir). Copiado para fora de um repositório, ele clona em `./gymflex`.
 
 ## Como rodar (desenvolvimento)
 

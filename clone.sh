@@ -6,7 +6,8 @@
 #   branch  padrão: main
 #   pasta   padrão: gymflex (só usada quando ainda não existe o repositório)
 #
-# Dentro de um repositório já clonado, atualiza ele mesmo. Fora de um, clona em ./pasta.
+# O script fica na raiz do projeto e sempre atualiza o repositório em que ele está, não importa de
+# qual pasta você o execute. Se for copiado para fora de um repositório, clona em ./pasta.
 # Variável opcional: REPO_URL (padrão: https://github.com/talesCPV/gymflex.git)
 
 set -euo pipefail
@@ -24,7 +25,13 @@ info() { echo "==> $*"; }
 command -v git >/dev/null || erro "git não encontrado"
 
 # ---------- clone (primeira vez) ----------
-if [ ! -d "$PWD/.git" ] && [ ! -d "$DIR/.git" ]; then
+# raiz do projeto = pasta onde este script está (se for um repositório); senão ./pasta, se já existir
+AQUI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RAIZ=""
+if [ -d "$AQUI/.git" ]; then RAIZ="$AQUI"
+elif [ -d "$DIR/.git" ]; then RAIZ="$(cd "$DIR" && pwd)"; fi
+
+if [ -z "$RAIZ" ]; then
   if [ -e "$DIR" ] && [ -n "$(ls -A "$DIR" 2>/dev/null)" ]; then
     erro "a pasta '$DIR' já existe e não está vazia (e não é um repositório git)"
   fi
@@ -41,9 +48,8 @@ if [ ! -d "$PWD/.git" ] && [ ! -d "$DIR/.git" ]; then
 fi
 
 # ---------- atualização ----------
-if [ -d "$PWD/.git" ]; then ALVO="$PWD"; else ALVO="$DIR"; fi
+ALVO="$RAIZ"
 cd "$ALVO"
-ALVO="$(pwd)"
 
 # não mexe em nada se houver alterações suas em arquivos versionados (os protegidos ficam de fora)
 EXCLUI=(); for f in "${PROTEGIDOS[@]}"; do EXCLUI+=(":(exclude)$f"); done
@@ -81,7 +87,7 @@ ANTES="$(git rev-parse HEAD)"
 info "Buscando '$BRANCH' em origin"
 git fetch origin "$BRANCH"
 git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH" "origin/$BRANCH"
-git merge --ff-only "origin/$BRANCH" || erro "seu branch local divergiu de origin/$BRANCH (há commits locais). Resolva manualmente."
+git merge --ff-only "origin/$BRANCH" || erro "não foi possível avançar para origin/$BRANCH (veja a mensagem do git acima: commits locais divergentes ou arquivos seus que seriam sobrescritos). Nada do seu config foi alterado."
 DEPOIS="$(git rev-parse HEAD)"
 
 restaurar

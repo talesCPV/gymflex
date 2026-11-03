@@ -1,5 +1,5 @@
 const NOMES = { usuarios: 'Usuários', alunos: 'Alunos', funcionarios: 'Funcionários', treinos: 'Treinos', financeiro: 'Financeiro' };
-const MODS = { usuarios: viewUsuarios, alunos: viewAlunos, treinos: viewTreinos, funcionarios: viewFuncionarios };   // demais módulos serão registrados aqui
+const MODS = { usuarios: viewUsuarios, alunos: viewAlunos, treinos: viewTreinos, funcionarios: viewFuncionarios, financeiro: viewFinanceiro };   // demais módulos serão registrados aqui
 let ME;
 
 const $ = id => document.getElementById(id);
@@ -158,4 +158,60 @@ async function viewFuncionarios() {
   };
   $('nf').onclick = () => form();
   document.querySelectorAll('[data-ef]').forEach(b => b.onclick = () => form(fs.find(x => x.id == b.dataset.ef)));
+}
+
+let FIN = { mes: new Date().toISOString().slice(0, 7), filtro: 'todos' };
+
+async function viewFinanceiro() {
+  const { resumo: r, lancamentos } = await api('api/financeiro.php?mes=' + FIN.mes);
+  const lista = lancamentos.filter(l => FIN.filtro === 'todos' || l.tipo === FIN.filtro);
+  const cls = v => v >= 0 ? 'pos' : 'neg';
+  const atr = r.atrasos_anteriores.map(a => `${a.n} ${a.tipo === 'receber' ? 'a receber' : 'a pagar'} (${brl(a.total)})`).join(' · ');
+  const status = l => l.pago_em ? '<span class="badge pos">pago</span>' : l.atrasado == 1 ? '<span class="badge neg">atrasado</span>' : '<span class="badge pend">pendente</span>';
+  $('main').innerHTML = `
+  <div class="card"><div class="row"><h3>Financeiro</h3><input type="month" id="fm" value="${FIN.mes}" style="width:auto"></div>
+    <div class="kpis" style="margin-top:12px">
+      <div class="kpi"><small>A receber (pendente)</small><b class="pend">${brl(r.receber.pendente)}</b></div>
+      <div class="kpi"><small>Recebido</small><b class="pos">${brl(r.receber.pago)}</b></div>
+      <div class="kpi"><small>A pagar (pendente)</small><b class="pend">${brl(r.pagar.pendente)}</b></div>
+      <div class="kpi"><small>Pago</small><b class="neg">${brl(r.pagar.pago)}</b></div>
+      <div class="kpi"><small>Saldo realizado</small><b class="${cls(r.saldo_realizado)}">${brl(r.saldo_realizado)}</b></div>
+      <div class="kpi"><small>Saldo previsto do mês</small><b class="${cls(r.saldo_previsto)}">${brl(r.saldo_previsto)}</b></div>
+    </div>
+    ${atr ? `<div class="err">⚠ Atrasos de meses anteriores: ${esc(atr)}</div>` : ''}</div>
+  <div class="card"><div class="row"><div class="tabs">${['todos', 'receber', 'pagar'].map(f => `<button data-f="${f}" class="alt ${FIN.filtro === f ? 'on' : ''}">${{ todos: 'Todos', receber: 'A receber', pagar: 'A pagar' }[f]}</button>`).join('')}</div>
+      <div class="tabs"><button id="nl">Novo</button><button class="alt" id="gm">Gerar mensalidades</button><button class="alt" id="gs">Gerar salários</button></div></div>
+    <div class="tbl"><table><tr><th>Venc.</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th>Status</th><th></th></tr>
+    ${lista.map(l => `<tr><td>${new Date(l.vencimento + 'T12:00').toLocaleDateString('pt-BR').slice(0, 5)}</td><td>${esc(l.descricao)}</td><td>${esc(l.categoria)}</td>
+      <td class="${l.tipo === 'receber' ? 'pos' : 'neg'}">${l.tipo === 'receber' ? '+' : '−'}${brl(l.valor)}</td><td>${status(l)}</td>
+      <td style="white-space:nowrap">${l.pago_em ? `<button class="alt" data-es="${l.id}">Estornar</button>` : `<button data-pg="${l.id}">${l.tipo === 'receber' ? 'Receber' : 'Pagar'}</button> <button class="alt" data-el="${l.id}">Editar</button>`}</td></tr>`).join('')
+      || '<tr><td colspan="6" style="color:var(--mut)">Nenhum lançamento neste mês.</td></tr>'}</table></div></div>`;
+
+  $('fm').onchange = e => { if (e.target.value) { FIN.mes = e.target.value; viewFinanceiro(); } };
+  document.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { FIN.filtro = b.dataset.f; viewFinanceiro(); });
+  const post = async (body, ok) => { try { const d = await api('api/financeiro.php', 'POST', body); if (ok) alert(ok(d)); viewFinanceiro(); } catch (x) { alert(x.message); } };
+  document.querySelectorAll('[data-pg]').forEach(b => b.onclick = () => post({ acao: 'pagar', id: +b.dataset.pg }));
+  document.querySelectorAll('[data-es]').forEach(b => b.onclick = () => post({ acao: 'estornar', id: +b.dataset.es }));
+  $('gm').onclick = () => post({ acao: 'gerar', o: 'mensalidades', mes: FIN.mes }, d => `${d.geradas} mensalidade(s) gerada(s) para ${FIN.mes}.`);
+  $('gs').onclick = () => post({ acao: 'gerar', o: 'salarios', mes: FIN.mes }, d => `${d.geradas} salário(s) gerado(s) para ${FIN.mes}.`);
+
+  const CATS = { receber: ['Mensalidade', 'Locação de espaço', 'Outros'], pagar: ['Aluguel', 'Água', 'Luz', 'Internet', 'Salário', 'Empréstimo', 'Pró-labore', 'Manutenção de equipamentos', 'Outros'] };
+  const form = l => {
+    modal(`<h3>${l ? 'Editar' : 'Novo'} lançamento</h3><form id="lf">
+      <label>Tipo</label><select name="tipo"><option value="receber" ${l?.tipo === 'receber' ? 'selected' : ''}>A receber</option><option value="pagar" ${l?.tipo !== 'receber' ? 'selected' : ''}>A pagar</option></select>
+      <label>Categoria</label><input name="categoria" list="cats" required value="${esc(l?.categoria)}"><datalist id="cats"></datalist>
+      <label>Descrição</label><input name="descricao" required value="${esc(l?.descricao)}">
+      <label>Valor (R$)</label><input name="valor" type="number" step="0.01" min="0.01" required value="${esc(l?.valor ?? '')}">
+      <label>Vencimento</label><input name="vencimento" type="date" required value="${esc(l?.vencimento ?? FIN.mes + '-' + String(Math.min(new Date().getDate(), 28)).padStart(2, '0'))}">
+      ${l ? '' : '<label>Repetir por quantos meses?</label><input name="repetir" type="number" min="1" max="60" value="1">'}
+      <div class="err" id="le"></div><div class="row"><button>Salvar</button>${l ? '<button type="button" class="danger" id="ld">Excluir</button>' : ''}<button type="button" class="alt" onclick="closeModal()">Cancelar</button></div></form>`);
+    const dl = () => { $('cats').innerHTML = CATS[$('lf').tipo.value].map(c => `<option>${c}</option>`).join(''); };
+    dl(); $('lf').tipo.onchange = dl;
+    $('lf').onsubmit = async e => { e.preventDefault(); const d = Object.fromEntries(new FormData($('lf'))); if (l) d.id = l.id;
+      try { await api('api/financeiro.php', 'POST', d); closeModal(); viewFinanceiro(); } catch (x) { $('le').textContent = x.message; } };
+    if (l) $('ld').onclick = async () => { if (!confirm('Excluir este lançamento?')) return;
+      try { await api('api/financeiro.php?id=' + l.id, 'DELETE'); closeModal(); viewFinanceiro(); } catch (x) { $('le').textContent = x.message; } };
+  };
+  $('nl').onclick = () => form();
+  document.querySelectorAll('[data-el]').forEach(b => b.onclick = () => form(lancamentos.find(x => x.id == b.dataset.el)));
 }

@@ -27,3 +27,10 @@ th{color:var(--neon2)}
 .modal-bg .card{width:100%;max-width:440px;max-height:90vh;overflow:auto}
 .chk{display:flex;gap:8px;align-items:center;margin:4px 0;color:var(--txt)}.chk input{width:auto}
 .tbl{overflow-x:auto}
+
+.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.kpi{background:#0b0d10;border:1px solid var(--line);border-radius:6px;padding:10px}
+.kpi small{color:var(--mut);display:block}.kpi b{font-size:17px}
+.pos{color:var(--neon)}.neg{color:var(--pink)}.pend{color:var(--neon2)}
+.tabs{display:flex;gap:8px;flex-wrap:wrap}.tabs button.on{background:var(--neon2);color:#000}
+.badge{font-size:12px;border:1px solid currentColor;border-radius:10px;padding:1px 8px}

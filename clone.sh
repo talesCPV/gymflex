@@ -51,14 +51,6 @@ fi
 ALVO="$RAIZ"
 cd "$ALVO"
 
-# não mexe em nada se houver alterações suas em arquivos versionados (os protegidos ficam de fora)
-EXCLUI=(); for f in "${PROTEGIDOS[@]}"; do EXCLUI+=(":(exclude)$f"); done
-if [ -n "$(git status --porcelain --untracked-files=no -- . "${EXCLUI[@]}")" ]; then
-  echo "Há alterações locais em arquivos versionados:" >&2
-  git status --short --untracked-files=no -- . "${EXCLUI[@]}" >&2
-  erro "salve (commit) ou descarte essas alterações e rode de novo. Nada foi alterado."
-fi
-
 # a configuração do banco deve estar fora do git; se não estiver, avisa
 for f in "${PROTEGIDOS[@]}"; do
   if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
@@ -66,9 +58,15 @@ for f in "${PROTEGIDOS[@]}"; do
   fi
 done
 
-# guarda os arquivos protegidos FORA da pasta e devolve ao sair (mesmo se algo falhar)
+# identidade só para o stash funcionar mesmo sem git configurado (não altera sua configuração)
+GITID=(-c "user.name=$(git config user.name || echo clone.sh)" -c "user.email=$(git config user.email || echo clone@localhost)")
+EXCLUI=(); for f in "${PROTEGIDOS[@]}"; do EXCLUI+=(":(exclude)$f"); done
+
 BKP="$(mktemp -d)"
-restaurar() {
+STASHED=0
+RESULTADO_ALTERACOES=""
+
+restaurar_protegidos() {
   local f
   for f in "${PROTEGIDOS[@]}"; do
     if [ -f "$BKP/$(echo "$f" | tr / _)" ]; then
@@ -78,24 +76,59 @@ restaurar() {
   done
   rmdir "$BKP" 2>/dev/null || true
 }
-trap restaurar EXIT
+# devolve as suas alterações locais; se conflitarem com a atualização, deixa o arquivo na versão nova
+# e mantém as suas guardadas no stash (nada é perdido)
+devolver_alteracoes() {
+  [ "$STASHED" = 1 ] || return 0
+  STASHED=0
+  if git "${GITID[@]}" stash pop -q >/dev/null 2>&1; then RESULTADO_ALTERACOES="ok"
+  else RESULTADO_ALTERACOES="conflito"; git reset -q; git checkout -q -- .; fi
+}
+finalizar() { devolver_alteracoes; restaurar_protegidos; }
+trap finalizar EXIT   # roda mesmo se algo falhar no meio
+
 for f in "${PROTEGIDOS[@]}"; do
-  [ -f "$f" ] && mv "$f" "$BKP/$(echo "$f" | tr / _)" && info "Configuração local preservada: $f"
+  if [ -f "$f" ]; then mv "$f" "$BKP/$(echo "$f" | tr / _)"; info "Configuração local preservada: $f"; fi
 done
+
+# suas edições em arquivos versionados NÃO impedem a atualização: ficam de lado e voltam depois
+if [ -n "$(git status --porcelain --untracked-files=no -- . "${EXCLUI[@]}")" ]; then
+  echo "Você tem alterações locais em arquivos versionados:"
+  git status --short --untracked-files=no -- . "${EXCLUI[@]}"
+  git "${GITID[@]}" stash push -q -m "clone.sh: alterações locais $(date '+%F %T')" -- . "${EXCLUI[@]}" && STASHED=1
+  info "Guardadas temporariamente; serão reaplicadas depois da atualização."
+fi
 
 ANTES="$(git rev-parse HEAD)"
 info "Buscando '$BRANCH' em origin"
 git fetch origin "$BRANCH"
+# uma cópia solta do clone.sh dentro do repositório (não versionada) impediria o checkout
+if [ -f clone.sh ] && ! git ls-files --error-unmatch clone.sh >/dev/null 2>&1 && git cat-file -e "origin/$BRANCH:clone.sh" 2>/dev/null; then
+  rm -f clone.sh; info "Cópia solta do clone.sh substituída pela versão do repositório."
+fi
 git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH" "origin/$BRANCH"
-git merge --ff-only "origin/$BRANCH" || erro "não foi possível avançar para origin/$BRANCH (veja a mensagem do git acima: commits locais divergentes ou arquivos seus que seriam sobrescritos). Nada do seu config foi alterado."
+git merge --ff-only "origin/$BRANCH" || erro "não foi possível avançar para origin/$BRANCH (veja a mensagem do git acima: commits locais divergentes ou arquivos seus que seriam sobrescritos). Suas alterações e o seu config foram devolvidos."
 DEPOIS="$(git rev-parse HEAD)"
 
-restaurar
+devolver_alteracoes
+restaurar_protegidos
 trap - EXIT
 
 echo
 if [ "$ANTES" = "$DEPOIS" ]; then info "Já estava atualizado ($(git rev-parse --short HEAD))."
 else info "Atualizado: $(git rev-parse --short "$ANTES") -> $(git rev-parse --short "$DEPOIS")"; git --no-pager log --oneline "$ANTES..$DEPOIS" | head -20; fi
+
+case "$RESULTADO_ALTERACOES" in
+  ok) info "Suas alterações locais foram reaplicadas." ;;
+  conflito)
+    echo
+    echo "ATENÇÃO: suas alterações locais conflitam com a atualização. Os arquivos ficaram na versão NOVA do repositório"
+    echo "e as suas edições estão guardadas (nada foi perdido). Para vê-las ou recuperá-las:"
+    echo "  git stash list                 # procure 'clone.sh: alterações locais'"
+    echo "  git stash show -p              # ver o que você tinha alterado"
+    echo "  git stash pop                  # reaplicar e resolver o conflito à mão"
+    echo "Para ter o banco configurado sem editar arquivos do repositório, use api/config.local.php." ;;
+esac
 
 [ -f api/config.local.php ] || echo "AVISO: api/config.local.php não existe. Copie api/config.example.php e ajuste o banco."
 if [ "$ANTES" != "$DEPOIS" ] && ! git diff --quiet "$ANTES" "$DEPOIS" -- sql/; then

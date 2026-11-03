@@ -2,7 +2,7 @@
 if (!defined('SEM_SESSAO')) session_start();
 header('Content-Type: application/json; charset=utf-8');
 
-const MODULOS = ['usuarios','alunos','acesso','funcionarios','treinos','financeiro'];
+const MODULOS = ['usuarios','alunos','acesso','funcionarios','treinos','ponto','ponto_gestao','financeiro'];
 
 function db(): PDO {
   static $pdo;

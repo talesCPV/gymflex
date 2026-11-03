@@ -231,6 +231,36 @@ CREATE TABLE IF NOT EXISTS acessos (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------
+-- CARTÃO DE PONTO (funcionários)
+-- Controle interno de jornada. NÃO substitui um REP/sistema de ponto homologado exigido
+-- pela legislação trabalhista (Portaria MTP 671/2021); confirme com o contador.
+-- ---------------------------------------------------------------------
+-- cada marcação; entrada/saída é deduzida pela ordem no dia (1ª entrada, 2ª saída, 3ª entrada...)
+CREATE TABLE IF NOT EXISTS ponto_registros (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  id_funcionario INT NOT NULL,
+  data_hora DATETIME NOT NULL,                       -- sempre a hora do servidor, no ponto próprio
+  origem ENUM('proprio','manual') NOT NULL DEFAULT 'proprio',
+  justificativa VARCHAR(200) NULL,                   -- obrigatória nas marcações manuais
+  id_usuario INT NULL,                               -- quem registrou
+  cancelado TINYINT(1) NOT NULL DEFAULT 0,           -- marcações não são apagadas, só canceladas
+  cancelado_motivo VARCHAR(200) NULL,
+  cancelado_por INT NULL,
+  criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_ponto_func_data (id_funcionario, data_hora),
+  FOREIGN KEY (id_funcionario) REFERENCES funcionarios(id),
+  FOREIGN KEY (id_usuario) REFERENCES usuarios(id) ON DELETE SET NULL,
+  FOREIGN KEY (cancelado_por) REFERENCES usuarios(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- jornada diária de quem foge do padrão (config 'ponto.jornada_minutos', 480 = 8h)
+CREATE TABLE IF NOT EXISTS ponto_jornadas (
+  id_funcionario INT NOT NULL PRIMARY KEY,
+  minutos SMALLINT UNSIGNED NOT NULL,
+  FOREIGN KEY (id_funcionario) REFERENCES funcionarios(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------------------
 -- VIEWS
 -- ---------------------------------------------------------------------
 -- lançamentos com nome do aluno/funcionário e status calculado

@@ -120,6 +120,18 @@ Módulo **Acesso**: a recepção digita (ou lê com um leitor de código de barr
 - **Permissão:** o módulo "Acesso" é liberado por perfil (Usuários > Perfis); um perfil de recepção pode ter só ele.
 - **Banco:** tabela `acessos` e view `v_alunos_inadimplentes` (no `schema.sql`; em banco existente basta executá-lo de novo). A coluna `origem` já prevê outras fontes, como uma catraca, que ainda **não** está integrada.
 
+## Cartão de ponto (funcionários)
+
+Módulo **Ponto**, para controle interno da jornada. **Não substitui** um REP/sistema de ponto homologado exigido pela legislação trabalhista (Portaria MTP 671/2021); confirme com o contador antes de usá-lo como registro oficial.
+
+- **Bater o ponto:** o funcionário entra com o próprio login e toca em "Registrar entrada/saída". A hora é **sempre a do servidor**, nunca a do aparelho. É preciso que o usuário esteja vinculado ao funcionário (Funcionários > Usuário de acesso). Toques repetidos em menos de 60 segundos são ignorados.
+- **Entrada ou saída:** deduzido pela ordem no dia (1ª marcação = entrada, 2ª = saída, 3ª = entrada...). Isso permite o intervalo de almoço e continua correto depois de uma correção.
+- **Espelho do mês:** marcações por dia, horas trabalhadas, esperado e **saldo até ontem**. A jornada padrão é 8h por dia útil (`'ponto' => ['jornada_minutos' => 480]` em `api/config.local.php`), de segunda a sexta, exceto feriados nacionais; pode ser alterada por funcionário. Dia sem marcação conta como falta; dia com número ímpar de marcações aparece como "saída não registrada".
+- **Dois módulos, liberados por perfil:** `Ponto` (bater o próprio ponto e ver o próprio espelho) e `Gestão de ponto` (ver quem está dentro, ver o espelho de qualquer funcionário, lançar marcação manual, cancelar marcação, definir jornada).
+- **Correções com rastro:** a marcação manual exige justificativa e fica marcada com `*`. Marcações não são apagadas: o cancelamento exige motivo e a marcação continua visível, riscada.
+- **Ainda não tratado:** abonos, férias, atestados, horas extras com adicional, banco de horas com vencimento e jornadas com turno que vira a meia-noite.
+- **Banco:** tabelas `ponto_registros` e `ponto_jornadas` (no `schema.sql`; em banco existente basta executá-lo de novo).
+
 ## Regras do Financeiro
 
 - **Geração automática:** ao abrir o Financeiro, entram sozinhos (mês atual e próximo) as mensalidades dos alunos ativos, os salários dos funcionários ativos e as contas recorrentes (a pagar e a receber). Nada duplica. Excluir uma ocorrência gerada apenas a cancela.

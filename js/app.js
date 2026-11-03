@@ -1,5 +1,5 @@
-const NOMES = { usuarios: 'Usuários', alunos: 'Alunos', acesso: 'Acesso', funcionarios: 'Funcionários', treinos: 'Treinos', financeiro: 'Financeiro' };
-const MODS = { usuarios: viewUsuarios, alunos: viewAlunos, acesso: viewAcesso, treinos: viewTreinos, funcionarios: viewFuncionarios, financeiro: viewFinanceiro };   // demais módulos serão registrados aqui
+const NOMES = { usuarios: 'Usuários', alunos: 'Alunos', acesso: 'Acesso', ponto: 'Ponto', ponto_gestao: 'Gestão de ponto', funcionarios: 'Funcionários', treinos: 'Treinos', financeiro: 'Financeiro' };
+const MODS = { usuarios: viewUsuarios, alunos: viewAlunos, acesso: viewAcesso, ponto: viewPonto, ponto_gestao: viewPonto, treinos: viewTreinos, funcionarios: viewFuncionarios, financeiro: viewFinanceiro };   // demais módulos serão registrados aqui
 let ME;
 
 const $ = id => document.getElementById(id);
@@ -11,7 +11,8 @@ $('out').onclick = async () => { await api('api/logout.php'); location = 'index.
 (async () => {
   try { ME = await api('api/me.php'); } catch { location = 'index.html'; return; }
   $('who').textContent = `${ME.nome} (${ME.perfil})`;
-  const mods = ME.modulos.filter(m => MODS[m]);
+  let mods = ME.modulos.filter(m => MODS[m]);
+  if (mods.includes('ponto') && mods.includes('ponto_gestao')) mods = mods.filter(m => m !== 'ponto_gestao');   // as duas usam a mesma aba
   $('nav').innerHTML = mods.map(m => `<button data-m="${m}">${NOMES[m]}</button>`).join('');
   $('nav').onclick = e => { const m = e.target.dataset.m; if (!m) return;
     [...$('nav').children].forEach(b => b.classList.toggle('on', b === e.target)); MODS[m](); };
@@ -296,4 +297,88 @@ async function viewAcesso() {
       <div class="row"><span></span><button class="alt" onclick="closeModal()">Fechar</button></div>`);
   };
   atualizar(); $('ab').focus();
+}
+
+// ---------------- Cartão de ponto ----------------
+let PONTO = { mes: new Date().toLocaleDateString('sv-SE').slice(0, 7), func: null };
+const hm = (min, sinal = false) => { const n = Math.abs(min); return (min < 0 ? '-' : sinal && min > 0 ? '+' : '') + Math.floor(n / 60) + 'h' + String(n % 60).padStart(2, '0'); };
+
+async function viewPonto() {
+  const gestor = ME.modulos.includes('ponto_gestao'), bate = ME.modulos.includes('ponto');
+  $('main').innerHTML = '<div id="pb"></div><div id="pq"></div><div id="pe"></div>';
+  let vinculado = false;
+
+  const bater = async () => {
+    const r = await api('api/ponto.php?hoje=1');
+    vinculado = r.vinculado;
+    if (!r.vinculado) { $('pb').innerHTML = '<div class="card"><h3>Bater ponto</h3><div class="err">Seu usuário não está vinculado a um funcionário. Peça para vincular em Funcionários &gt; Usuário de acesso.</div></div>'; return null; }
+    $('pb').innerHTML = `<div class="card" style="text-align:center"><div style="color:var(--mut)">${esc(r.funcionario.nome)}</div>
+      <div id="pr" style="font-size:44px;font-weight:bold;letter-spacing:2px;color:var(--neon2);text-shadow:0 0 10px var(--neon2)">${esc(r.agora)}</div>
+      <div style="margin:6px 0 12px" class="${r.dentro ? 'pos' : 'pend'}">${r.dentro ? 'Você está DENTRO desde ' + esc(r.marcacoes[r.marcacoes.length - 1].hora) : r.marcacoes.length ? 'Você está FORA' : 'Nenhuma marcação hoje'}</div>
+      <button id="pbtn" style="width:100%;font-size:20px;padding:18px">Registrar ${r.proximo === 'entrada' ? 'ENTRADA' : 'SAÍDA'}</button>
+      <div id="pm" class="err"></div>
+      <div style="margin-top:8px;color:var(--mut)">Trabalhado hoje: <b class="pos">${hm(r.trabalhado_min)}</b></div>
+      <div class="tabs" style="justify-content:center;margin-top:8px">${r.marcacoes.map(m => `<span class="badge ${m.tipo === 'entrada' ? 'pos' : 'pend'}">${m.tipo === 'entrada' ? 'E' : 'S'} ${esc(m.hora)}${m.origem === 'manual' ? '*' : ''}</span>`).join('')}</div></div>`;
+    $('pbtn').onclick = async () => { $('pbtn').disabled = true;
+      try { const x = await api('api/ponto.php', 'POST', { acao: 'bater' });
+        await bater(); $('pm').textContent = ''; if (x.duplicado) { $('pm').style.color = 'var(--mut)'; $('pm').textContent = 'Marcação já registrada agora há pouco.'; } else $('pm').style.color = 'var(--neon)', $('pm').textContent = (x.registrado === 'entrada' ? 'Entrada' : 'Saída') + ' registrada às ' + x.agora;
+        if (!gestor || PONTO.func == null || PONTO.func === r.funcionario.id) espelho(r.funcionario.id);
+      } catch (e) { $('pm').textContent = e.message; $('pbtn').disabled = false; } };
+    return r.funcionario.id;
+  };
+
+  const equipe = async () => {
+    const r = await api('api/ponto.php?equipe=1');
+    const rot = { dentro: ['dentro', 'pos'], fora: ['fora', 'pend'], sem_registro: ['sem registro hoje', 'neg'] };
+    $('pq').innerHTML = `<div class="card"><h3>Equipe agora</h3>${r.funcionarios.map(f => `<div class="lin"><div class="row" style="flex-wrap:nowrap"><span>${esc(f.nome)} <small style="color:var(--mut)">${esc(f.cargo)}</small></span>
+      <span class="badge ${rot[f.situacao][1]}" style="white-space:nowrap">${rot[f.situacao][0]}</span></div>
+      <small style="color:var(--mut)">${f.primeira_entrada ? 'Entrou às ' + esc(f.primeira_entrada) + (f.situacao === 'fora' ? ' · saiu às ' + esc(f.desde) : '') : ''}</small>
+      <button class="alt" data-pf="${f.id}" style="margin-top:6px;padding:4px 10px">Espelho</button></div>`).join('') || '<small style="color:var(--mut)">Nenhum funcionário ativo.</small>'}</div>`;
+    document.querySelectorAll('[data-pf]').forEach(b => b.onclick = () => { PONTO.func = +b.dataset.pf; espelho(PONTO.func); $('pe').scrollIntoView({ behavior: 'smooth' }); });
+  };
+
+  const espelho = async idf => {
+    if (!idf) { $('pe').innerHTML = ''; return; }
+    PONTO.func = idf;
+    let r; try { r = await api(`api/ponto.php?espelho=1&mes=${PONTO.mes}&id_funcionario=${idf}`); } catch (e) { $('pe').innerHTML = `<div class="card err">${esc(e.message)}</div>`; return; }
+    const t = r.totais, g = r.pode_gerenciar;
+    const marc = d => d.marcacoes.map(m => m.cancelado
+      ? `<span class="badge" style="color:var(--mut);text-decoration:line-through" title="Cancelada: ${esc(m.cancelado_motivo)}">${esc(m.hora)}</span>`
+      : `<span class="badge ${m.tipo === 'entrada' ? 'pos' : 'pend'}" ${g ? `data-cm="${m.id}" style="cursor:pointer"` : ''} title="${esc(m.justificativa || '')}">${m.tipo === 'entrada' ? 'E' : 'S'} ${esc(m.hora)}${m.origem === 'manual' ? '*' : ''}</span>`).join(' ');
+    $('pe').innerHTML = `<div class="card"><div class="row"><h3>Espelho de ${esc(r.funcionario.nome)}</h3><input type="month" id="pm2" value="${r.mes}" style="width:auto"></div>
+      <small style="color:var(--mut)">Jornada: ${hm(r.jornada_minutos)} por dia útil${g ? ' · * = marcação manual' : ''}</small>
+      <div class="kpis" style="margin-top:10px">
+        <div class="kpi"><small>Trabalhado no mês</small><b class="pend">${hm(t.trabalhado_min)}</b></div>
+        <div class="kpi"><small>Esperado até ontem</small><b>${hm(t.esperado_min)}</b></div>
+        <div class="kpi"><small>Saldo até ontem</small><b class="${t.saldo_min >= 0 ? 'pos' : 'neg'}">${hm(t.saldo_min, true)}</b></div>
+        <div class="kpi"><small>Faltas / incompletos</small><b class="${t.faltas || t.incompletos ? 'neg' : 'pos'}">${t.faltas} / ${t.incompletos}</b></div></div>
+      ${g ? `<div class="tabs" style="margin-top:10px"><button id="pn">Lançar marcação</button><button class="alt" id="pj">Jornada</button></div>` : ''}
+      <div style="margin-top:8px">${r.dias.filter(d => !d.futuro).reverse().map(d => `<div class="lin" ${d.util ? '' : 'style="opacity:.75"'}>
+        <div class="row" style="flex-wrap:nowrap"><span><b>${d.data.slice(8)}/${d.data.slice(5, 7)}</b> ${d.dia_semana}${d.util ? '' : ' <small style="color:var(--mut)">folga</small>'}${d.hoje ? ' <span class="badge pend">hoje</span>' : ''}</span>
+          <span>${d.marcacoes.length ? hm(d.trabalhado_min) : '—'} ${d.saldo_min === null || (!d.util && d.saldo_min === 0) ? '' : `<small class="${d.saldo_min >= 0 ? 'pos' : 'neg'}">(${hm(d.saldo_min, true)})</small>`}</span></div>
+        <div style="margin-top:4px">${marc(d) || (d.util && !d.hoje ? '<small class="neg">sem marcação (falta)</small>' : '')}${d.incompleto ? ' <small class="neg">saída não registrada</small>' : ''}</div></div>`).join('') || '<small style="color:var(--mut)">Sem dias neste mês.</small>'}</div>
+      <small style="display:block;margin-top:10px;color:var(--mut)">Controle interno. Dias úteis sem marcação contam como falta; abonos, férias e atestados ainda não são tratados.</small></div>`;
+    $('pm2').onchange = e => { if (e.target.value) { PONTO.mes = e.target.value; espelho(idf); } };
+    if (!g) return;
+    $('pn').onclick = () => { modal(`<h3>Lançar marcação</h3><small style="color:var(--mut)">${esc(r.funcionario.nome)}</small><form id="mf">
+      <label>Data e hora</label><input type="datetime-local" name="data_hora" required>
+      <label>Justificativa (fica registrada)</label><input name="justificativa" required minlength="5" placeholder="Ex.: esqueceu de bater a saída">
+      <div class="err" id="me"></div><div class="row"><button>Lançar</button><button type="button" class="alt" onclick="closeModal()">Cancelar</button></div></form>`);
+      $('mf').onsubmit = async e => { e.preventDefault(); try { await api('api/ponto.php', 'POST', { acao: 'manual', id_funcionario: idf, data_hora: $('mf').data_hora.value, justificativa: $('mf').justificativa.value }); closeModal(); refresh(); } catch (x) { $('me').textContent = x.message; } }; };
+    $('pj').onclick = () => { modal(`<h3>Jornada diária</h3><small style="color:var(--mut)">${esc(r.funcionario.nome)}</small><form id="jf">
+      <label>Horas por dia útil</label><input type="number" name="h" min="0" max="24" step="0.25" required value="${r.jornada_minutos / 60}">
+      <div class="err" id="je"></div><div class="row"><button>Salvar</button><button type="button" class="alt" onclick="closeModal()">Cancelar</button></div></form>`);
+      $('jf').onsubmit = async e => { e.preventDefault(); try { await api('api/ponto.php', 'POST', { acao: 'jornada', id_funcionario: idf, minutos: Math.round($('jf').h.value * 60) }); closeModal(); espelho(idf); } catch (x) { $('je').textContent = x.message; } }; };
+    document.querySelectorAll('[data-cm]').forEach(b => b.onclick = () => { modal(`<h3>Cancelar marcação</h3><small style="color:var(--mut)">${esc(b.textContent)} · a marcação não é apagada, fica cancelada no histórico</small><form id="cf">
+      <label>Motivo (fica registrado)</label><input name="motivo" required minlength="5">
+      <div class="err" id="ce"></div><div class="row"><button class="danger">Cancelar marcação</button><button type="button" class="alt" onclick="closeModal()">Voltar</button></div></form>`);
+      $('cf').onsubmit = async e => { e.preventDefault(); try { await api('api/ponto.php', 'POST', { acao: 'cancelar', id: +b.dataset.cm, motivo: $('cf').motivo.value }); closeModal(); refresh(); } catch (x) { $('ce').textContent = x.message; } }; });
+  };
+  const refresh = async () => { if (gestor) await equipe(); espelho(PONTO.func); };
+
+  let meuId = null;
+  if (bate) meuId = await bater();
+  if (gestor) await equipe();
+  PONTO.func = PONTO.func && gestor ? PONTO.func : meuId;
+  espelho(PONTO.func || meuId);
 }

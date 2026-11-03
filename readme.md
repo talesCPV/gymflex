@@ -38,3 +38,22 @@ Este módulo deve ter o controle de todas contas a pagar e faturas a receber, se
 ### CONCLUSÃO
 
 Acho que isso é o suficiente para começarmos, este documento é vivo, podendo ser alterado por mim ou diretamente por você, conforme formos descidindo  novas diretivas para o sistema.
+
+---
+
+## Como rodar (desenvolvimento)
+
+1. Crie o banco `gymflex` no MySQL e execute `sql/001_usuarios.sql`.
+2. (Opcional) crie `api/config.local.php` retornando `['host'=>..., 'db'=>..., 'user'=>..., 'pass'=>...]`.
+3. Crie o Master inicial: `php api/setup.php "Seu Nome" email@exemplo.com suasenha123`
+4. Suba o servidor: `php -S localhost:8000` e abra `http://localhost:8000`.
+
+**Decisão técnica:** a senha usa `password_hash()` do PHP (bcrypt/argon2, com salt próprio) em vez de `email+senha`, por ser mais seguro e não exigir rehash ao trocar o email.
+
+## Regras do Financeiro
+
+- **Geração automática:** ao abrir o Financeiro, entram sozinhos (mês atual e próximo) as mensalidades dos alunos ativos, os salários dos funcionários ativos e as contas recorrentes (a pagar e a receber). Nada duplica. Excluir uma ocorrência gerada apenas a cancela.
+- **Recorrentes:** marque "Conta recorrente" ao criar um lançamento. Para parar, use "Recorrentes" → "Encerrar" (ocorrências futuras pendentes são canceladas).
+- **Dia de pagamento do salário:** fica no cadastro do funcionário.
+- **Dia útil:** todo vencimento gerado automaticamente cai no dia útil mais próximo (sábado → sexta, domingo → segunda; em empate, o seguinte). Consideram-se feriados nacionais, Carnaval, Sexta-feira Santa e Corpus Christi. Feriados estaduais e municipais **não** são considerados.
+- **Pagamento:** baixa manual por enquanto. O gateway/integração bancária será definido depois.

@@ -1,5 +1,5 @@
-const NOMES = { usuarios: 'Usuários', alunos: 'Alunos', funcionarios: 'Funcionários', treinos: 'Treinos', financeiro: 'Financeiro' };
-const MODS = { usuarios: viewUsuarios, alunos: viewAlunos, treinos: viewTreinos, funcionarios: viewFuncionarios, financeiro: viewFinanceiro };   // demais módulos serão registrados aqui
+const NOMES = { usuarios: 'Usuários', alunos: 'Alunos', acesso: 'Acesso', funcionarios: 'Funcionários', treinos: 'Treinos', financeiro: 'Financeiro' };
+const MODS = { usuarios: viewUsuarios, alunos: viewAlunos, acesso: viewAcesso, treinos: viewTreinos, funcionarios: viewFuncionarios, financeiro: viewFinanceiro };   // demais módulos serão registrados aqui
 let ME;
 
 const $ = id => document.getElementById(id);
@@ -225,4 +225,75 @@ async function viewFinanceiro() {
   };
   $('nl').onclick = () => form();
   document.querySelectorAll('[data-el]').forEach(b => b.onclick = () => form(lancamentos.find(x => x.id == b.dataset.el)));
+}
+
+let ACESSO = { data: new Date().toLocaleDateString('sv-SE') };   // AAAA-MM-DD no fuso do navegador
+
+async function viewAcesso() {
+  $('main').innerHTML = `
+  <div class="card"><h3>Registrar entrada</h3>
+    <form id="af" class="row" style="margin-top:8px;flex-wrap:nowrap"><input id="ab" placeholder="Matrícula ou nome do aluno" autocomplete="off" autofocus><button>Registrar</button></form>
+    <div id="ar" style="margin-top:12px"></div></div>
+  <div class="card"><div class="row"><h3>Entradas do dia</h3><div class="tabs"><input type="date" id="ad" value="${ACESSO.data}" style="width:auto"><button class="alt" id="ai">Inadimplentes</button></div></div>
+    <div class="kpis" id="ak" style="margin-top:12px"></div>
+    <div id="al" style="margin-top:8px"></div></div>`;
+
+  const atualizar = async () => {
+    const r = await api('api/acesso.php?resumo=1&data=' + ACESSO.data);
+    const k = r.kpis;
+    $('ak').innerHTML = `
+      <div class="kpi"><small>Entradas liberadas</small><b class="pos">${k.liberados}</b></div>
+      <div class="kpi"><small>Alunos diferentes</small><b class="pend">${k.alunos_unicos}</b></div>
+      <div class="kpi"><small>Bloqueios</small><b class="neg">${k.bloqueados}</b></div>
+      <div class="kpi"><small>Inadimplentes (bloqueados)</small><b class="neg">${k.inadimplentes_bloqueados}</b></div>`;
+    $('al').innerHTML = r.recentes.map(a => `<div class="lin">
+      <div class="row" style="flex-wrap:nowrap"><span><b>${esc(a.data_hora.slice(11, 16))}</b> &nbsp;${esc(a.aluno || '—')} <small style="color:var(--mut)">${esc(a.matricula || '')}</small></span>
+        <span class="badge ${a.resultado === 'liberado' ? 'pos' : 'neg'}" style="white-space:nowrap">${a.manual == 1 ? 'liberado (manual)' : a.resultado}</span></div>
+      <small style="color:var(--mut)">${esc(a.motivo)}${a.operador ? ' · por ' + esc(a.operador) : ''}</small></div>`).join('')
+      || '<div style="color:var(--mut);padding:8px 0">Nenhuma entrada neste dia.</div>';
+  };
+
+  const mostrar = (a, nome, matricula, motivo, ok, extra = '') => {
+    $('ar').innerHTML = `<div style="border:2px solid var(--${ok ? 'neon' : 'pink'});border-radius:8px;padding:16px;text-align:center;box-shadow:0 0 14px ${ok ? 'rgba(57,255,20,.35)' : 'rgba(255,43,214,.35)'}">
+      <div class="${ok ? 'pos' : 'neg'}" style="font-size:28px;font-weight:bold;letter-spacing:2px">${ok ? 'LIBERADO' : 'BLOQUEADO'}</div>
+      <div style="font-size:18px;margin-top:6px">${esc(nome)} <small style="color:var(--mut)">${esc(matricula)}</small></div>
+      <div style="color:var(--mut);margin-top:4px">${esc(motivo)}${extra}</div>
+      ${ok ? '' : '<div style="margin-top:12px"><button class="danger" id="am">Liberar mesmo assim</button></div>'}</div>`;
+    if (!ok) $('am').onclick = () => liberar(a);
+  };
+
+  const registrar = async corpo => {
+    try {
+      const r = await api('api/acesso.php', 'POST', corpo);
+      if (r.candidatos) {
+        $('ar').innerHTML = '<div style="color:var(--mut)">Vários alunos encontrados, escolha:</div><div class="tabs" style="margin-top:8px">'
+          + r.candidatos.map(c => `<button class="alt" data-c="${c.id}">${esc(c.nome)} (${esc(c.matricula)})</button>`).join('') + '</div>';
+        document.querySelectorAll('[data-c]').forEach(b => b.onclick = () => registrar({ id_aluno: +b.dataset.c }));
+        return;
+      }
+      mostrar(r.aluno, r.aluno.nome, r.aluno.matricula, r.motivo, r.resultado === 'liberado', r.duplicado ? ' · já registrado agora há pouco' : '');
+      $('ab').value = ''; await atualizar();
+    } catch (x) { $('ar').innerHTML = `<div class="err">${esc(x.message)}</div>`; }
+    $('ab').focus();
+  };
+
+  const liberar = a => {
+    modal(`<h3>Liberar ${esc(a.nome)}</h3><form id="lf"><label>Motivo da liberação (fica registrado)</label><input name="motivo" required autofocus placeholder="Ex.: pagou no balcão, visitante autorizado">
+      <div class="err" id="le"></div><div class="row"><button>Liberar entrada</button><button type="button" class="alt" onclick="closeModal()">Cancelar</button></div></form>`);
+    $('lf').onsubmit = async e => { e.preventDefault();
+      try { await api('api/acesso.php', 'POST', { id_aluno: a.id, forcar: true, motivo: $('lf').motivo.value }); closeModal(); await registrarManual(a); }
+      catch (x) { $('le').textContent = x.message; } };
+  };
+  const registrarManual = async a => { $('ar').innerHTML = `<div style="border:2px solid var(--neon);border-radius:8px;padding:16px;text-align:center"><div class="pos" style="font-size:28px;font-weight:bold">LIBERADO</div><div style="font-size:18px">${esc(a.nome)} <small style="color:var(--mut)">${esc(a.matricula)}</small></div><div style="color:var(--mut)">Liberação manual registrada</div></div>`; await atualizar(); $('ab').focus(); };
+
+  $('af').onsubmit = e => { e.preventDefault(); if ($('ab').value.trim()) registrar({ busca: $('ab').value.trim() }); };
+  $('ad').onchange = e => { if (e.target.value) { ACESSO.data = e.target.value; atualizar(); } };
+  $('ai').onclick = async () => {
+    const r = await api('api/acesso.php?inadimplentes=1');
+    modal(`<h3>Alunos inadimplentes</h3><small style="color:var(--mut)">Carência: ${r.carencia_dias} dia(s) · ${r.bloqueia ? 'bloqueia a entrada' : 'só avisa, não bloqueia'}</small>
+      <div class="tbl"><table><tr><th>Aluno</th><th>Atraso</th><th>Valor</th></tr>${r.alunos.map(a => `<tr><td>${esc(a.nome)} <small style="color:var(--mut)">${esc(a.matricula)}</small></td>
+      <td class="${a.dias_atraso > r.carencia_dias ? 'neg' : 'pend'}">${a.dias_atraso} dia(s)</td><td>${brl(a.total)}</td></tr>`).join('') || '<tr><td colspan="3" style="color:var(--mut)">Ninguém em atraso.</td></tr>'}</table></div>
+      <div class="row"><span></span><button class="alt" onclick="closeModal()">Fechar</button></div>`);
+  };
+  atualizar(); $('ab').focus();
 }

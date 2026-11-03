@@ -14,10 +14,11 @@ button:hover{background:var(--neon);color:#000;box-shadow:0 0 10px var(--neon)}
 button.alt{color:var(--neon2);border-color:var(--neon2)}button.alt:hover{background:var(--neon2);color:#000}
 button.danger{color:var(--pink);border-color:var(--pink)}button.danger:hover{background:var(--pink);color:#000}
 .err{color:var(--pink);min-height:1.4em;margin-top:8px}
-header{display:flex;justify-content:space-between;align-items:center;padding:12px 20px;border-bottom:1px solid var(--line)}
+header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px 16px;padding:12px 20px;border-bottom:1px solid var(--line)}
+header>div{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px}
 nav{display:flex;gap:8px;padding:12px 20px;flex-wrap:wrap}
 nav button.on{background:var(--neon);color:#000}
-main{padding:20px;display:grid;gap:16px}
+main{padding:20px;display:grid;grid-template-columns:minmax(0,1fr);gap:16px}   /* minmax(0,..): tabelas largas rolam dentro do cartão em vez de alargar a página */
 table{width:100%;border-collapse:collapse}
 th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line)}
 th{color:var(--neon2)}
@@ -34,3 +35,4 @@ th{color:var(--neon2)}
 .pos{color:var(--neon)}.neg{color:var(--pink)}.pend{color:var(--neon2)}
 .tabs{display:flex;gap:8px;flex-wrap:wrap}.tabs button.on{background:var(--neon2);color:#000}
 .badge{font-size:12px;border:1px solid currentColor;border-radius:10px;padding:1px 8px}
+.lin{padding:10px 0;border-bottom:1px solid var(--line)}.lin small{display:block;margin-top:2px}

@@ -108,6 +108,18 @@ Nenhum banco foi escolhido ainda; a baixa é manual. A estrutura para plugar um 
   ```
 - **Para ligar um banco real:** criar `api/integracao/NomeDoBanco.php` implementando a interface, registrar um `case` em `Provedores::ativo()` e colocar as credenciais em `config.local.php`. Ainda não há botão "Cobrar" na tela do Financeiro; ele entra junto com o primeiro provedor real.
 
+## Controle de acesso (entrada dos alunos)
+
+Módulo **Acesso**: a recepção digita (ou lê com um leitor de código de barras) a **matrícula** do aluno, ou parte do **nome**, e o sistema responde na hora **LIBERADO** ou **BLOQUEADO**, registrando a tentativa.
+
+- **Libera** se o aluno está ativo e sem mensalidade vencida além da carência. **Bloqueia** se estiver inativo ou com mensalidade vencida há mais dias que a carência.
+- **Carência:** 5 dias por padrão. Em `api/config.local.php`: `'acesso' => ['carencia_dias' => 5, 'bloquear_inadimplente' => true]`. Com `bloquear_inadimplente` em `false` o sistema só avisa e não bloqueia.
+- **Liberação manual:** num bloqueio, "Liberar mesmo assim" exige um motivo; a entrada fica registrada como manual, com quem liberou e a justificativa.
+- **Nome com vários resultados:** o sistema mostra as opções para escolher. Leituras repetidas do mesmo aluno em 2 minutos não geram registro duplicado.
+- **Painel do dia:** entradas liberadas, alunos diferentes, bloqueios e inadimplentes bloqueados, mais o histórico do dia escolhido e a lista de inadimplentes.
+- **Permissão:** o módulo "Acesso" é liberado por perfil (Usuários > Perfis); um perfil de recepção pode ter só ele.
+- **Banco:** tabela `acessos` e view `v_alunos_inadimplentes` (no `schema.sql`; em banco existente basta executá-lo de novo). A coluna `origem` já prevê outras fontes, como uma catraca, que ainda **não** está integrada.
+
 ## Regras do Financeiro
 
 - **Geração automática:** ao abrir o Financeiro, entram sozinhos (mês atual e próximo) as mensalidades dos alunos ativos, os salários dos funcionários ativos e as contas recorrentes (a pagar e a receber). Nada duplica. Excluir uma ocorrência gerada apenas a cancela.

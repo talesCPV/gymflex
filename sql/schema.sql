@@ -212,6 +212,25 @@ CREATE TABLE IF NOT EXISTS extrato_bancario (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------------------
+-- CONTROLE DE ACESSO (entrada dos alunos na academia)
+-- ---------------------------------------------------------------------
+-- cada tentativa de entrada fica registrada, liberada ou bloqueada
+CREATE TABLE IF NOT EXISTS acessos (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  id_aluno INT NULL,
+  data_hora DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  resultado ENUM('liberado','bloqueado') NOT NULL,
+  motivo VARCHAR(160) NULL,
+  manual TINYINT(1) NOT NULL DEFAULT 0,       -- 1 = liberado manualmente por um funcionário
+  origem VARCHAR(20) NOT NULL DEFAULT 'recepcao',   -- recepcao, catraca...
+  id_usuario INT NULL,                        -- quem registrou
+  INDEX idx_acessos_data (data_hora),
+  INDEX idx_acessos_aluno (id_aluno, data_hora),
+  FOREIGN KEY (id_aluno) REFERENCES alunos(id) ON DELETE SET NULL,
+  FOREIGN KEY (id_usuario) REFERENCES usuarios(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------------------
 -- VIEWS
 -- ---------------------------------------------------------------------
 -- lançamentos com nome do aluno/funcionário e status calculado
@@ -240,6 +259,18 @@ SELECT DATE_SUB(vencimento, INTERVAL DAYOFMONTH(vencimento) - 1 DAY) AS mes_inic
 FROM lancamentos
 WHERE cancelado = 0
 GROUP BY DATE_SUB(vencimento, INTERVAL DAYOFMONTH(vencimento) - 1 DAY), tipo;
+
+-- alunos com mensalidade vencida e não paga (base do bloqueio de acesso)
+CREATE OR REPLACE VIEW v_alunos_inadimplentes AS
+SELECT a.id AS id_aluno, a.nome, a.matricula,
+       COUNT(*) AS mensalidades,
+       SUM(l.valor) AS total,
+       MIN(l.vencimento) AS vencimento_mais_antigo,
+       DATEDIFF(CURDATE(), MIN(l.vencimento)) AS dias_atraso
+FROM alunos a
+JOIN lancamentos l ON l.id_aluno = a.id AND l.tipo = 'receber' AND l.cancelado = 0
+                  AND l.pago_em IS NULL AND l.vencimento < CURDATE()
+GROUP BY a.id, a.nome, a.matricula;
 
 -- ---------------------------------------------------------------------
 -- PROCEDURES

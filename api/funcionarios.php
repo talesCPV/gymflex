@@ -25,25 +25,27 @@ if ($m === 'POST') {
   $i = input();
   $nome = trim($i['nome'] ?? ''); $cargo = trim($i['cargo'] ?? '');
   $cpf = preg_replace('/\D/', '', $i['cpf'] ?? '');
+  $diaPag = (int)($i['dia_pagamento'] ?? 5);
   $salario = (float)str_replace(',', '.', (string)($i['salario'] ?? 0));
   $data = $i['data_admissao'] ?? date('Y-m-d');
   $idu = ($i['id_usuario'] ?? '') === '' ? null : (int)$i['id_usuario'];
   if ($nome === '' || $cargo === '') out(['erro'=>'Nome e cargo são obrigatórios'], 422);
   if ($cpf !== '' && !cpf_valido($cpf)) out(['erro'=>'CPF inválido'], 422);
   if ($salario < 0) out(['erro'=>'Salário inválido'], 422);
+  if ($diaPag < 1 || $diaPag > 31) out(['erro'=>'Dia de pagamento deve ser de 1 a 31'], 422);
   if (!DateTime::createFromFormat('Y-m-d', $data)) out(['erro'=>'Data inválida'], 422);
   if ($idu !== null) {
     $c = db()->prepare('SELECT 1 FROM usuarios WHERE id=?'); $c->execute([$idu]);
     if (!$c->fetch()) out(['erro'=>'Usuário não encontrado'], 422);
   }
-  $campos = [$nome,$idu,$cargo,$cpf ?: null,trim($i['telefone']??'')?:null,trim($i['endereco']??'')?:null,$data,$salario];
+  $campos = [$nome,$idu,$cargo,$cpf ?: null,trim($i['telefone']??'')?:null,trim($i['endereco']??'')?:null,$data,$salario,$diaPag];
   try {
     if (!empty($i['id'])) {
-      db()->prepare('UPDATE funcionarios SET nome=?,id_usuario=?,cargo=?,cpf=?,telefone=?,endereco=?,data_admissao=?,salario=?,ativo=? WHERE id=?')
+      db()->prepare('UPDATE funcionarios SET nome=?,id_usuario=?,cargo=?,cpf=?,telefone=?,endereco=?,data_admissao=?,salario=?,dia_pagamento=?,ativo=? WHERE id=?')
         ->execute([...$campos,(int)($i['ativo']??1),$i['id']]);
       out(['id'=>(int)$i['id']]);
     }
-    db()->prepare('INSERT INTO funcionarios (nome,id_usuario,cargo,cpf,telefone,endereco,data_admissao,salario) VALUES (?,?,?,?,?,?,?,?)')
+    db()->prepare('INSERT INTO funcionarios (nome,id_usuario,cargo,cpf,telefone,endereco,data_admissao,salario,dia_pagamento) VALUES (?,?,?,?,?,?,?,?,?)')
       ->execute($campos);
     out(['id'=>(int)db()->lastInsertId()]);
   } catch (PDOException $e) {

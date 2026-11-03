@@ -133,10 +133,10 @@ async function viewFuncionarios() {
   const fmtCpf = c => c ? c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : '';
   $('main').innerHTML = `
   <div class="card"><div class="row"><h3>Funcionários</h3><button id="nf">Novo funcionário</button></div>
-    <div class="tbl"><table><tr><th>Nome</th><th>Cargo</th><th>CPF</th><th>Telefone</th><th>Admissão</th><th>Salário</th><th>Ativo</th><th></th></tr>
+    <div class="tbl"><table><tr><th>Nome</th><th>Cargo</th><th>CPF</th><th>Telefone</th><th>Admissão</th><th>Salário</th><th>Pgto.</th><th>Ativo</th><th></th></tr>
     ${fs.map(f => `<tr><td>${esc(f.nome)}</td><td>${esc(f.cargo)}</td><td>${esc(fmtCpf(f.cpf))}</td><td>${esc(f.telefone)}</td>
-      <td>${new Date(f.data_admissao + 'T12:00').toLocaleDateString('pt-BR')}</td><td>${brl(f.salario)}</td><td>${f.ativo == 1 ? 'sim' : 'não'}</td>
-      <td><button class="alt" data-ef="${f.id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="8" style="color:var(--mut)">Nenhum funcionário cadastrado.</td></tr>'}</table></div></div>`;
+      <td>${new Date(f.data_admissao + 'T12:00').toLocaleDateString('pt-BR')}</td><td>${brl(f.salario)}</td><td>dia ${f.dia_pagamento}</td><td>${f.ativo == 1 ? 'sim' : 'não'}</td>
+      <td><button class="alt" data-ef="${f.id}">Editar</button></td></tr>`).join('') || '<tr><td colspan="9" style="color:var(--mut)">Nenhum funcionário cadastrado.</td></tr>'}</table></div></div>`;
   const form = async f => {
     const us = await api('api/funcionarios.php?usuarios=' + (f?.id_usuario || 0));
     modal(`<h3>${f ? 'Editar' : 'Novo'} funcionário</h3><form id="ff">
@@ -148,6 +148,7 @@ async function viewFuncionarios() {
       <label>Endereço</label><input name="endereco" value="${esc(f?.endereco)}">
       <label>Data de admissão</label><input name="data_admissao" type="date" required value="${esc(f?.data_admissao ?? new Date().toISOString().slice(0, 10))}">
       <label>Salário (R$)</label><input name="salario" type="number" step="0.01" min="0" required value="${esc(f?.salario ?? '')}">
+      <label>Dia de pagamento do salário</label><input name="dia_pagamento" type="number" min="1" max="31" required value="${esc(f?.dia_pagamento ?? 5)}">
       <label>Usuário de acesso (opcional)</label><select name="id_usuario"><option value="">— sem login —</option>
         ${us.map(u => `<option value="${u.id}" ${u.id == f?.id_usuario ? 'selected' : ''}>${esc(u.nome)} (${esc(u.email)})</option>`).join('')}</select>
       ${f ? `<label class="chk"><input type="checkbox" name="ativo" ${f.ativo == 1 ? 'checked' : ''}> Ativo</label>` : ''}
@@ -180,7 +181,7 @@ async function viewFinanceiro() {
     </div>
     ${atr ? `<div class="err">⚠ Atrasos de meses anteriores: ${esc(atr)}</div>` : ''}</div>
   <div class="card"><div class="row"><div class="tabs">${['todos', 'receber', 'pagar'].map(f => `<button data-f="${f}" class="alt ${FIN.filtro === f ? 'on' : ''}">${{ todos: 'Todos', receber: 'A receber', pagar: 'A pagar' }[f]}</button>`).join('')}</div>
-      <div class="tabs"><button id="nl">Novo</button><button class="alt" id="gm">Gerar mensalidades</button><button class="alt" id="gs">Gerar salários</button></div></div>
+      <div class="tabs"><button id="nl">Novo</button><button class="alt" id="rc">Recorrentes</button><button class="alt" id="gm">Reprocessar mês</button></div></div>
     <div class="tbl"><table><tr><th>Venc.</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th>Status</th><th></th></tr>
     ${lista.map(l => `<tr><td>${new Date(l.vencimento + 'T12:00').toLocaleDateString('pt-BR').slice(0, 5)}</td><td>${esc(l.descricao)}</td><td>${esc(l.categoria)}</td>
       <td class="${l.tipo === 'receber' ? 'pos' : 'neg'}">${l.tipo === 'receber' ? '+' : '−'}${brl(l.valor)}</td><td>${status(l)}</td>
@@ -192,8 +193,16 @@ async function viewFinanceiro() {
   const post = async (body, ok) => { try { const d = await api('api/financeiro.php', 'POST', body); if (ok) alert(ok(d)); viewFinanceiro(); } catch (x) { alert(x.message); } };
   document.querySelectorAll('[data-pg]').forEach(b => b.onclick = () => post({ acao: 'pagar', id: +b.dataset.pg }));
   document.querySelectorAll('[data-es]').forEach(b => b.onclick = () => post({ acao: 'estornar', id: +b.dataset.es }));
-  $('gm').onclick = () => post({ acao: 'gerar', o: 'mensalidades', mes: FIN.mes }, d => `${d.geradas} mensalidade(s) gerada(s) para ${FIN.mes}.`);
-  $('gs').onclick = () => post({ acao: 'gerar', o: 'salarios', mes: FIN.mes }, d => `${d.geradas} salário(s) gerado(s) para ${FIN.mes}.`);
+  // mensalidades, salários e recorrentes entram sozinhos (mês atual e próximo); este botão serve para meses passados
+  $('gm').onclick = async () => { try { const a = await api('api/financeiro.php', 'POST', { acao: 'gerar', o: 'mensalidades', mes: FIN.mes });
+    const b = await api('api/financeiro.php', 'POST', { acao: 'gerar', o: 'salarios', mes: FIN.mes });
+    alert(`${a.geradas} mensalidade(s) e ${b.geradas} salário(s) gerados para ${FIN.mes}.`); viewFinanceiro(); } catch (x) { alert(x.message); } };
+  $('rc').onclick = async () => { const rs = await api('api/financeiro.php?recorrencias=1');
+    modal(`<h3>Contas recorrentes</h3>${rs.map(r => `<div class="row" style="margin:8px 0"><span>${esc(r.descricao)} <small style="color:var(--mut)">${r.tipo === 'receber' ? 'a receber' : 'a pagar'} · ${brl(r.valor)} · todo dia ${r.dia_vencimento}</small></span>
+      <button class="danger" data-er="${r.id}">Encerrar</button></div>`).join('') || '<small style="color:var(--mut)">Nenhuma conta recorrente. Marque "Conta recorrente" ao criar um lançamento.</small>'}
+      <div class="row"><span></span><button class="alt" onclick="closeModal()">Fechar</button></div>`);
+    document.querySelectorAll('[data-er]').forEach(b => b.onclick = async () => { if (!confirm('Encerrar? Ocorrências futuras pendentes serão canceladas.')) return;
+      await api('api/financeiro.php', 'POST', { acao: 'encerrar_recorrencia', id: +b.dataset.er }); closeModal(); viewFinanceiro(); }); };
 
   const CATS = { receber: ['Mensalidade', 'Locação de espaço', 'Outros'], pagar: ['Aluguel', 'Água', 'Luz', 'Internet', 'Salário', 'Empréstimo', 'Pró-labore', 'Manutenção de equipamentos', 'Outros'] };
   const form = l => {
@@ -203,11 +212,13 @@ async function viewFinanceiro() {
       <label>Descrição</label><input name="descricao" required value="${esc(l?.descricao)}">
       <label>Valor (R$)</label><input name="valor" type="number" step="0.01" min="0.01" required value="${esc(l?.valor ?? '')}">
       <label>Vencimento</label><input name="vencimento" type="date" required value="${esc(l?.vencimento ?? FIN.mes + '-' + String(Math.min(new Date().getDate(), 28)).padStart(2, '0'))}">
-      ${l ? '' : '<label>Repetir por quantos meses?</label><input name="repetir" type="number" min="1" max="60" value="1">'}
+      ${l ? '' : `<label class="chk"><input type="checkbox" name="recorrente"> Conta recorrente (entra sozinha todo mês)</label>
+        <div id="rp"><label>Ou repetir por quantos meses? (parcelas)</label><input name="repetir" type="number" min="1" max="60" value="1"></div>`}
       <div class="err" id="le"></div><div class="row"><button>Salvar</button>${l ? '<button type="button" class="danger" id="ld">Excluir</button>' : ''}<button type="button" class="alt" onclick="closeModal()">Cancelar</button></div></form>`);
     const dl = () => { $('cats').innerHTML = CATS[$('lf').tipo.value].map(c => `<option>${c}</option>`).join(''); };
     dl(); $('lf').tipo.onchange = dl;
-    $('lf').onsubmit = async e => { e.preventDefault(); const d = Object.fromEntries(new FormData($('lf'))); if (l) d.id = l.id;
+    if (!l) $('lf').recorrente.onchange = e => { $('rp').style.display = e.target.checked ? 'none' : ''; };
+    $('lf').onsubmit = async e => { e.preventDefault(); const d = Object.fromEntries(new FormData($('lf'))); if (l) d.id = l.id; d.recorrente = !l && $('lf').recorrente.checked;
       try { await api('api/financeiro.php', 'POST', d); closeModal(); viewFinanceiro(); } catch (x) { $('le').textContent = x.message; } };
     if (l) $('ld').onclick = async () => { if (!confirm('Excluir este lançamento?')) return;
       try { await api('api/financeiro.php?id=' + l.id, 'DELETE'); closeModal(); viewFinanceiro(); } catch (x) { $('le').textContent = x.message; } };

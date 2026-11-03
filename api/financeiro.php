@@ -56,19 +56,15 @@ if ($m === 'GET') {
   if (!mes_ok($mes)) out(['erro'=>'Mês inválido'], 422);
   gerar_automaticos();
   $ini = "$mes-01"; $fim = date('Y-m-d', strtotime("$ini +1 month"));
-  $q = db()->prepare("SELECT l.*,a.nome aluno,f.nome funcionario, (l.pago_em IS NULL AND l.vencimento<CURDATE()) atrasado
-    FROM lancamentos l LEFT JOIN alunos a ON a.id=l.id_aluno LEFT JOIN funcionarios f ON f.id=l.id_funcionario
-    WHERE l.cancelado=0 AND l.vencimento>=? AND l.vencimento<? ORDER BY l.vencimento,l.id");
+  $q = db()->prepare("SELECT * FROM v_lancamentos WHERE cancelado=0 AND vencimento>=? AND vencimento<? ORDER BY vencimento,id");
   $q->execute([$ini, $fim]);
-  $r = db()->prepare("SELECT tipo, SUM(valor) total, SUM(IF(pago_em IS NOT NULL,valor,0)) pago,
-      SUM(IF(pago_em IS NULL,valor,0)) pendente, SUM(IF(pago_em IS NULL AND vencimento<CURDATE(),valor,0)) atrasado
-    FROM lancamentos WHERE cancelado=0 AND vencimento>=? AND vencimento<? GROUP BY tipo");
-  $r->execute([$ini, $fim]);
+  $r = db()->prepare("SELECT tipo,total,pago,pendente,atrasado FROM v_resumo_mensal WHERE mes=?");
+  $r->execute([$mes]);
   $res = ['receber'=>['total'=>0,'pago'=>0,'pendente'=>0,'atrasado'=>0], 'pagar'=>['total'=>0,'pago'=>0,'pendente'=>0,'atrasado'=>0]];
   foreach ($r->fetchAll() as $row) { $t = $row['tipo']; unset($row['tipo']); $res[$t] = array_map('floatval', $row); }
   $res['saldo_realizado'] = $res['receber']['pago'] - $res['pagar']['pago'];
   $res['saldo_previsto'] = $res['receber']['total'] - $res['pagar']['total'];
-  $at = db()->prepare("SELECT tipo,COUNT(*) n,SUM(valor) total FROM lancamentos WHERE cancelado=0 AND pago_em IS NULL AND vencimento<? GROUP BY tipo");
+  $at = db()->prepare("SELECT tipo,COUNT(*) n,SUM(valor) total FROM v_lancamentos WHERE status='atrasado' AND vencimento<? GROUP BY tipo");
   $at->execute([$ini]);
   $res['atrasos_anteriores'] = $at->fetchAll();
   out(['resumo'=>$res, 'lancamentos'=>$q->fetchAll()]);
@@ -83,8 +79,8 @@ if ($m === 'POST') {
     if ($acao === 'pagar') {
       $d = $i['pago_em'] ?? date('Y-m-d');
       if (!data_ok($d)) out(['erro'=>'Data inválida'], 422);
-      db()->prepare('UPDATE lancamentos SET pago_em=? WHERE id=?')->execute([$d, $id]);
-    } else db()->prepare('UPDATE lancamentos SET pago_em=NULL WHERE id=?')->execute([$id]);
+      $st = db()->prepare("CALL sp_baixar_lancamento(?,?,'manual')"); $st->execute([$id, $d]); $st->closeCursor();
+    } else { $st = db()->prepare('CALL sp_estornar_lancamento(?)'); $st->execute([$id]); $st->closeCursor(); }
     out(['ok'=>true]);
   }
 
@@ -98,9 +94,7 @@ if ($m === 'POST') {
 
   if ($acao === 'encerrar_recorrencia') {
     $id = (int)($i['id'] ?? 0);
-    db()->prepare('UPDATE recorrencias SET ativo=0 WHERE id=?')->execute([$id]);
-    // as ocorrências futuras ainda não pagas deixam de valer; as já pagas/vencidas ficam
-    db()->prepare('UPDATE lancamentos SET cancelado=1 WHERE id_recorrencia=? AND pago_em IS NULL AND vencimento>CURDATE()')->execute([$id]);
+    $st = db()->prepare('CALL sp_encerrar_recorrencia(?)'); $st->execute([$id]); $st->closeCursor();
     out(['ok'=>true]);
   }
 

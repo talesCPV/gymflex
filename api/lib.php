@@ -1,5 +1,5 @@
 <?php
-session_start();
+if (!defined('SEM_SESSAO')) session_start();
 header('Content-Type: application/json; charset=utf-8');
 
 const MODULOS = ['usuarios','alunos','funcionarios','treinos','financeiro'];

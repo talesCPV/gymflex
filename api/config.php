@@ -1,5 +1,11 @@
 <?php
-// Copie para config.local.php para sobrescrever (não versionado).
-$cfg = ['host'=>'127.0.0.1','db'=>'gymflex','user'=>'root','pass'=>''];
-if (file_exists(__DIR__.'/config.local.php')) $cfg = array_merge($cfg, require __DIR__.'/config.local.php');
+// Copie api/config.example.php para api/config.local.php (ignorado pelo git) e ajuste.
+$cfg = [
+  'host' => '127.0.0.1', 'port' => 3306, 'db' => 'gymflex', 'user' => 'root', 'pass' => '',
+  'integracao' => [
+    'provedor' => null,          // null = desligado (baixa manual) | 'simulado' | futuramente 'inter', 'santander'...
+    'webhook_segredo' => '',     // segredo compartilhado usado pelo provedor 'simulado'
+  ],
+];
+if (file_exists(__DIR__.'/config.local.php')) $cfg = array_replace_recursive($cfg, require __DIR__.'/config.local.php');
 return $cfg;

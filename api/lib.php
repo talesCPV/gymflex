@@ -1,5 +1,5 @@
 <?php
-session_start();
+if (!defined('SEM_SESSAO')) session_start();
 header('Content-Type: application/json; charset=utf-8');
 
 const MODULOS = ['usuarios','alunos','funcionarios','treinos','financeiro'];
@@ -8,7 +8,7 @@ function db(): PDO {
   static $pdo;
   if (!$pdo) {
     $c = require __DIR__.'/config.php';
-    $pdo = new PDO("mysql:host={$c['host']};dbname={$c['db']};charset=utf8mb4", $c['user'], $c['pass'],
+    $pdo = new PDO("mysql:host={$c['host']};port=".($c['port'] ?? 3306).";dbname={$c['db']};charset=utf8mb4", $c['user'], $c['pass'],
       [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);
   }
   return $pdo;
